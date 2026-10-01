@@ -50,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.font.FontWeight
@@ -105,6 +106,7 @@ private fun weekStartMillis(): Long =
 fun SaunaScreen(nav: Nav) {
     val dao = Graph.dao
     val scope = rememberCoroutineScope()
+    val focus = LocalFocusManager.current
     val sessions by dao.saunas().collectAsState(initial = emptyList())
     var rounds by remember { mutableIntStateOf(3) }
     var minutes by remember { mutableIntStateOf(15) }
@@ -139,6 +141,7 @@ fun SaunaScreen(nav: Nav) {
                 TextInput(notes, { notes = it }, "Notes (optional)")
                 Gap(8)
                 BigButton(if (saved) "Saved ✓" else "Save ${rounds * minutes} min session", onClick = {
+                    focus.clearFocus()
                     scope.launch {
                         val now = System.currentTimeMillis()
                         val id = dao.insertSauna(SaunaSession(at = now, rounds = rounds, minutesPerRound = minutes, tempC = temp, coldContrast = cold, coldMinutes = if (cold) coldMin else 0, notes = notes))
@@ -179,6 +182,7 @@ fun DeletableRow(title: String, subtitle: String, onDelete: () -> Unit) {
 fun NeatScreen(nav: Nav) {
     val dao = Graph.dao
     val scope = rememberCoroutineScope()
+    val focus = LocalFocusManager.current
     val activities by dao.activities().collectAsState(initial = emptyList())
     val timerStart by dao.settingFlow(Settings.NEAT_TIMER_START).collectAsState(initial = null)
     val targetSessions by dao.settingFlow(Settings.NEAT_WEEKLY_SESSIONS).collectAsState(initial = "3")
@@ -232,6 +236,7 @@ fun NeatScreen(nav: Nav) {
                     NumberField(manual, { manual = it }, "Minutes", Modifier.weight(1f), decimal = false)
                     HGap()
                     Button(onClick = {
+                        focus.clearFocus()
                         val min = manual.toIntOrNull() ?: return@Button
                         scope.launch {
                             val at = System.currentTimeMillis() - min * 60_000L
@@ -257,6 +262,7 @@ fun NeatScreen(nav: Nav) {
 fun ActivityScreen(nav: Nav) {
     val dao = Graph.dao
     val scope = rememberCoroutineScope()
+    val focus = LocalFocusManager.current
     val activities by dao.activities().collectAsState(initial = emptyList())
     var type by remember { mutableStateOf(SessionType.BASKETBALL) }
     var duration by remember { mutableStateOf("60") }
@@ -290,6 +296,7 @@ fun ActivityScreen(nav: Nav) {
                 Gap(8)
                 val min = duration.toIntOrNull()
                 BigButton(if (saved) "Saved ✓" else "Save", enabled = min != null && min > 0 && rpe != null, onClick = {
+                    focus.clearFocus()
                     scope.launch {
                         val m = min ?: return@launch
                         val at = System.currentTimeMillis() - m * 60_000L
@@ -316,6 +323,7 @@ fun ActivityScreen(nav: Nav) {
 fun SleepScreen(nav: Nav) {
     val dao = Graph.dao
     val scope = rememberCoroutineScope()
+    val focus = LocalFocusManager.current
     val sleeps by dao.sleeps().collectAsState(initial = emptyList())
     val open = sleeps.firstOrNull { it.wakeAt == null && System.currentTimeMillis() - it.bedAt < 20 * 3600_000L }
     var rateFor by remember { mutableStateOf<Sleep?>(null) }
@@ -360,6 +368,7 @@ fun SleepScreen(nav: Nav) {
                 RatingRow(manualQuality, { manualQuality = it })
                 Gap(8)
                 BigButton("Save", secondary = true, enabled = Calc.parseNumber(manualHours) != null, onClick = {
+                    focus.clearFocus()
                     val h = Calc.parseNumber(manualHours) ?: return@BigButton
                     scope.launch {
                         val wake = LocalDate.now().atTime(7, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -392,6 +401,7 @@ fun SleepScreen(nav: Nav) {
 fun CheckInScreen(nav: Nav) {
     val dao = Graph.dao
     val scope = rememberCoroutineScope()
+    val focus = LocalFocusManager.current
     val checkIns by dao.checkIns().collectAsState(initial = emptyList())
     val todays = checkIns.firstOrNull { it.day == today() }
     var sleep by remember(todays) { mutableStateOf(todays?.sleep) }
@@ -478,6 +488,7 @@ private fun BodyMap(selected: Region?, onSelect: (Region) -> Unit) {
 fun NiggleScreen(nav: Nav) {
     val dao = Graph.dao
     val scope = rememberCoroutineScope()
+    val focus = LocalFocusManager.current
     val niggles by dao.niggles().collectAsState(initial = emptyList())
     var region by remember { mutableStateOf<Region?>(null) }
     var severity by remember { mutableStateOf(3f) }
@@ -502,6 +513,7 @@ fun NiggleScreen(nav: Nav) {
                 TextInput(notes, { notes = it }, "Notes (what aggravates it?)", singleLine = false)
                 Gap(8)
                 BigButton("Save", enabled = region != null, onClick = {
+                    focus.clearFocus()
                     val r = region ?: return@BigButton
                     scope.launch {
                         dao.insertNiggle(Niggle(at = System.currentTimeMillis(), region = r.name, side = r.side, severity = severity.toInt(), notes = notes))
@@ -525,6 +537,7 @@ fun NiggleScreen(nav: Nav) {
 fun BodyweightScreen(nav: Nav) {
     val dao = Graph.dao
     val scope = rememberCoroutineScope()
+    val focus = LocalFocusManager.current
     val entries by dao.bodyweights().collectAsState(initial = emptyList())
     val targetStr by dao.settingFlow(Settings.BODYWEIGHT_TARGET).collectAsState(initial = "98")
     val target = Calc.parseNumber(targetStr) ?: 98.0
@@ -540,6 +553,7 @@ fun BodyweightScreen(nav: Nav) {
                     NumberField(input, { input = it }, "kg", Modifier.weight(1f))
                     HGap()
                     Button(onClick = {
+                        focus.clearFocus()
                         val kg = Calc.parseNumber(input) ?: return@Button
                         scope.launch {
                             val existing = dao.bodyweight(today())
@@ -581,6 +595,7 @@ fun BodyweightScreen(nav: Nav) {
 fun ProteinScreen(nav: Nav) {
     val dao = Graph.dao
     val scope = rememberCoroutineScope()
+    val focus = LocalFocusManager.current
     val entries by dao.proteins().collectAsState(initial = emptyList())
     val presets by dao.proteinPresets().collectAsState(initial = emptyList())
     val minStr by dao.settingFlow(Settings.PROTEIN_MIN).collectAsState(initial = "160")
@@ -618,7 +633,7 @@ fun ProteinScreen(nav: Nav) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     NumberField(custom, { custom = it }, "Grams", Modifier.weight(1f), decimal = false)
                     HGap()
-                    OutlinedButton(onClick = { custom.toIntOrNull()?.let { add(it, "") }; custom = "" }, modifier = Modifier.height(56.dp)) { Text("Add") }
+                    OutlinedButton(onClick = { focus.clearFocus(); custom.toIntOrNull()?.let { add(it, "") }; custom = "" }, modifier = Modifier.height(56.dp)) { Text("Add") }
                 }
                 TextButton(onClick = { editPresets = !editPresets }) { Text(if (editPresets) "Done editing presets" else "Edit presets") }
                 if (editPresets) {
@@ -634,6 +649,7 @@ fun ProteinScreen(nav: Nav) {
                         NumberField(newGrams, { newGrams = it }, "g", Modifier.width(80.dp), decimal = false)
                     }
                     TextButton(enabled = newLabel.isNotBlank() && newGrams.toIntOrNull() != null, onClick = {
+                        focus.clearFocus()
                         scope.launch {
                             dao.insertProteinPreset(ProteinPreset(label = newLabel.trim(), grams = newGrams.toInt(), sortOrder = presets.size))
                             newLabel = ""; newGrams = ""
@@ -661,6 +677,7 @@ fun ProteinScreen(nav: Nav) {
 fun SupplementsScreen(nav: Nav) {
     val dao = Graph.dao
     val scope = rememberCoroutineScope()
+    val focus = LocalFocusManager.current
     val supplements by dao.supplements().collectAsState(initial = emptyList())
     val log by dao.supplementLog(today()).collectAsState(initial = emptyList())
     val taken = log.map { it.supplementId }.toSet()
@@ -690,6 +707,7 @@ fun SupplementsScreen(nav: Nav) {
                     androidx.compose.material3.OutlinedTextField(newName, { newName = it }, label = { Text("New supplement") }, singleLine = true, modifier = Modifier.weight(1f))
                     HGap()
                     Button(enabled = newName.isNotBlank(), onClick = {
+                        focus.clearFocus()
                         scope.launch { dao.insertSupplement(Supplement(name = newName.trim(), sortOrder = supplements.size)); newName = "" }
                     }) { Text("Add") }
                 }

@@ -83,6 +83,7 @@ class UiTourTest {
     }
 
     private fun back() {
+        Espresso.closeSoftKeyboard()
         Espresso.pressBack()
         compose.waitForIdle()
     }
