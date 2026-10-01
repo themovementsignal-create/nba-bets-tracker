@@ -53,7 +53,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew testReleaseUnitTest assembleRelease -PversionCode=${{ github.run_number }} --stacktrace
+        run: ./gradlew testDebugUnitTest assembleRelease -PversionCode=${{ github.run_number }}
 
       - name: Rename APK
         run: |
