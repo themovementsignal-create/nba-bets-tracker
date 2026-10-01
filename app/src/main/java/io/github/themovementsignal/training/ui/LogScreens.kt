@@ -28,6 +28,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -50,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -59,6 +62,8 @@ import io.github.themovementsignal.training.Graph
 import io.github.themovementsignal.training.data.Activity
 import io.github.themovementsignal.training.data.BodyWeight
 import io.github.themovementsignal.training.data.CheckIn
+import io.github.themovementsignal.training.data.DailySteps
+import io.github.themovementsignal.training.data.ConditioningKind
 import io.github.themovementsignal.training.data.Niggle
 import io.github.themovementsignal.training.data.ProteinEntry
 import io.github.themovementsignal.training.data.ProteinPreset
@@ -70,6 +75,7 @@ import io.github.themovementsignal.training.data.Sleep
 import io.github.themovementsignal.training.data.Supplement
 import io.github.themovementsignal.training.data.SupplementLog
 import io.github.themovementsignal.training.domain.Calc
+import io.github.themovementsignal.training.steps.Steps
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -197,7 +203,10 @@ fun NeatScreen(nav: Nav) {
     val minTarget = targetMin?.toIntOrNull() ?: 60
     val start = timerStart?.toLongOrNull()
 
+    val steps by dao.dailySteps().collectAsState(initial = emptyList())
+    val context = LocalContext.current
     LogScaffold("NEAT · treadmill", nav) {
+        item { StepsCard(steps, Steps.available(context)) }
         item {
             SectionCard("This week") {
                 Text("${week.size} of $sessionsTarget–${sessionsTarget + 1} sessions · ${week.sumOf { it.durationMin }} min",
@@ -256,7 +265,7 @@ fun NeatScreen(nav: Nav) {
     }
 }
 
-// ---------- Basketball & conditioning ----------
+// ---------- Conditioning ----------
 
 @Composable
 fun ActivityScreen(nav: Nav) {
@@ -264,20 +273,28 @@ fun ActivityScreen(nav: Nav) {
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
     val activities by dao.activities().collectAsState(initial = emptyList())
-    var type by remember { mutableStateOf(SessionType.BASKETBALL) }
-    var duration by remember { mutableStateOf("60") }
+    var kind by remember { mutableStateOf(ConditioningKind.all.first()) }
+    var kindMenu by remember { mutableStateOf(false) }
+    var duration by remember { mutableStateOf("30") }
     var rpe by remember { mutableStateOf<Int?>(null) }
     var notes by remember { mutableStateOf("") }
     var saved by remember { mutableStateOf(false) }
     val list = activities.filter { it.type == SessionType.BASKETBALL || it.type == SessionType.CONDITIONING }
 
-    LogScaffold("Basketball & conditioning", nav) {
+    LogScaffold("Conditioning", nav) {
         item {
             SectionCard("New session") {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(SessionType.BASKETBALL, SessionType.CONDITIONING).forEach { t ->
-                        if (t == type) Button(onClick = { type = t }, Modifier.weight(1f)) { Text(SessionType.label(t)) }
-                        else OutlinedButton(onClick = { type = t; saved = false }, Modifier.weight(1f)) { Text(SessionType.label(t)) }
+                Text("What did you do?")
+                Gap(4)
+                Box {
+                    OutlinedButton(onClick = { kindMenu = true }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                        Text(kind, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                        Text("▾")
+                    }
+                    DropdownMenu(expanded = kindMenu, onDismissRequest = { kindMenu = false }) {
+                        ConditioningKind.all.forEach { k ->
+                            DropdownMenuItem(text = { Text(k) }, onClick = { kind = k; kindMenu = false; saved = false })
+                        }
                     }
                 }
                 Gap(8)
@@ -300,8 +317,8 @@ fun ActivityScreen(nav: Nav) {
                     scope.launch {
                         val m = min ?: return@launch
                         val at = System.currentTimeMillis() - m * 60_000L
-                        val id = dao.insertActivity(Activity(type = type, startedAt = at, durationMin = m, rpe = rpe, notes = notes))
-                        Actions.recordGearUsage(type, id, at)
+                        val id = dao.insertActivity(Activity(type = SessionType.CONDITIONING, startedAt = at, durationMin = m, rpe = rpe, notes = notes, kind = kind))
+                        Actions.recordGearUsage(SessionType.CONDITIONING, id, at)
                         notes = ""; rpe = null; saved = true
                     }
                 })
@@ -310,90 +327,31 @@ fun ActivityScreen(nav: Nav) {
         }
         items(list, key = { it.id }) { a ->
             DeletableRow(
-                "${SessionType.label(a.type)} · ${a.durationMin} min" + (a.rpe?.let { " · RPE $it · load ${it * a.durationMin}" } ?: ""),
+                activityTitle(a) + " · ${a.durationMin} min" + (a.rpe?.let { " · RPE $it · load ${it * a.durationMin}" } ?: ""),
                 fmtDateTime(a.startedAt) + if (a.notes.isNotBlank()) " · ${a.notes}" else "",
             ) { scope.launch { dao.deleteActivity(a.id); dao.deleteGearUsageForSession(a.type, a.id) } }
         }
     }
 }
 
-// ---------- Sleep ----------
-
 @Composable
-fun SleepScreen(nav: Nav) {
-    val dao = Graph.dao
-    val scope = rememberCoroutineScope()
-    val focus = LocalFocusManager.current
-    val sleeps by dao.sleeps().collectAsState(initial = emptyList())
-    val open = sleeps.firstOrNull { it.wakeAt == null && System.currentTimeMillis() - it.bedAt < 20 * 3600_000L }
-    var rateFor by remember { mutableStateOf<Sleep?>(null) }
-    var manualHours by remember { mutableStateOf("") }
-    var manualQuality by remember { mutableStateOf<Int?>(null) }
-
-    LogScaffold("Sleep", nav) {
-        item {
-            SectionCard {
-                if (open != null) {
-                    Text("In bed since ${fmtTime(open.bedAt)}", style = MaterialTheme.typography.titleLarge)
-                    Gap(8)
-                    BigButton("☀ I'm awake", onClick = {
-                        scope.launch {
-                            val updated = open.copy(wakeAt = System.currentTimeMillis())
-                            dao.updateSleep(updated)
-                            rateFor = updated
-                        }
-                    })
-                    DangerTextButton("Cancel") { scope.launch { dao.deleteSleep(open.id) } }
-                } else {
-                    BigButton("🌙 Going to bed", onClick = { scope.launch { dao.insertSleep(Sleep(bedAt = System.currentTimeMillis())) } })
-                    Muted("Tap when you go to bed and again when you wake up.")
-                }
-            }
-        }
-        rateFor?.let { s ->
-            item {
-                SectionCard("How did you sleep?") {
-                    Muted("1 = terrible, 5 = great")
-                    Gap(4)
-                    RatingRow(s.quality, { q -> scope.launch { dao.updateSleep(s.copy(quality = q)); rateFor = null } })
-                }
-            }
-        }
-        item {
-            SectionCard("Forgot to tap? Log last night") {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    NumberField(manualHours, { manualHours = it }, "Hours slept", Modifier.weight(1f))
-                }
-                Gap(4)
-                RatingRow(manualQuality, { manualQuality = it })
-                Gap(8)
-                BigButton("Save", secondary = true, enabled = Calc.parseNumber(manualHours) != null, onClick = {
-                    focus.clearFocus()
-                    val h = Calc.parseNumber(manualHours) ?: return@BigButton
-                    scope.launch {
-                        val wake = LocalDate.now().atTime(7, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
-                        dao.insertSleep(Sleep(bedAt = wake - (h * 3600_000).toLong(), wakeAt = wake, quality = manualQuality))
-                        manualHours = ""; manualQuality = null
-                    }
-                })
-            }
-        }
-        items(sleeps.filter { it.wakeAt != null }, key = { it.id }) { s ->
-            val hours = (s.wakeAt!! - s.bedAt) / 3600_000.0
-            var rating by remember(s.id) { mutableStateOf(false) }
-            SectionCard(onClick = { rating = !rating }) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("${"%.1f".format(hours)} h" + (s.quality?.let { " · quality $it/5" } ?: " · tap to rate"))
-                        Muted("${fmtDateTime(s.bedAt)} → ${fmtTime(s.wakeAt ?: s.bedAt)}")
-                    }
-                    TextButton(onClick = { scope.launch { dao.deleteSleep(s.id) } }) { Text("✕", color = MaterialTheme.colorScheme.error) }
-                }
-                if (rating) RatingRow(s.quality, { q -> scope.launch { dao.updateSleep(s.copy(quality = q)) }; rating = false })
-            }
-        }
+fun StepsCard(steps: List<DailySteps>, sensor: Boolean) {
+    SectionCard("Steps") {
+        val today = steps.firstOrNull { it.day == today() }?.steps ?: 0
+        Text("%,d today".format(today), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        val days = (6 downTo 0).map { today() - it }
+        val values = days.map { d -> (steps.firstOrNull { it.day == d }?.steps ?: 0).toFloat() }
+        Muted("7-day average: %,d".format(values.average().toInt()))
+        Gap(6)
+        BarChart(values, days.map { LocalDate.ofEpochDay(it).dayOfWeek.name.take(2).lowercase().replaceFirstChar { c -> c.uppercase() } }, values.map { false })
+        if (!sensor) Muted("This phone has no step counter.")
+        else Muted("Counted by your phone while you carry it (needs the Physical activity permission).")
     }
 }
+
+/** "Conditioning · Rower", or "Basketball" for older entries. */
+fun activityTitle(a: Activity): String =
+    if (a.type == SessionType.CONDITIONING && a.kind.isNotBlank()) "Conditioning · ${a.kind}" else SessionType.label(a.type)
 
 // ---------- Morning check-in ----------
 

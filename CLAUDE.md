@@ -8,11 +8,11 @@
 - After each change, tell me exactly what to test on my phone.
 
 ## Project facts
-- App name: **Agon** (display name only, in `res/values/strings.xml`). Package name / applicationId: `io.github.themovementsignal.training` (permanent; changing it breaks updates and data).
+- App name: **Sig** (display name only, in `res/values/strings.xml`). Package name / applicationId: `io.github.themovementsignal.training` (permanent; changing it breaks updates and data).
 - Look: dark only, near-black + gold accent, bronze highlights; colours and fonts live in `ui/theme/Theme.kt`. Avoid purple.
 - Versions live in `gradle/libs.versions.toml`.
 - `.github/workflows/build.yml` builds a signed release APK (plus unit tests) on every push and, on `main`, publishes a GitHub Release tagged `build-<run number>`. versionCode = the Actions run number.
 - `.github/workflows/ui-tour.yml` runs on every branch except `main`: it boots an emulator, runs `UiTourTest` (clicks through every screen) and force-pushes screenshots, logcat and the result to the `ci-screenshots` branch. Check those screenshots before merging to `main`.
 - Signing secrets (repo Settings → Secrets → Actions): `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
-- Database: Room, schema version 1 shipped in Build 8. Any entity change from now on needs a version bump and a real Migration (see `data/AppDatabase.kt`). CI uploads the generated schema JSON as an artifact.
-- Code map: `data/` (entities, DAO, seed), `domain/` (pure logic + unit tests: 1RM, plates, weekly load, Strong CSV), `io/DataIO.kt` (backup/restore/export/import), `timer/` (rest timer service), `ui/` (Compose screens).
+- Database: Room. Schema JSON history is committed in `app/schemas/` (v1 shipped in Build 8, v2 adds sleep tracking, steps and conditioning kind via AutoMigration). Any entity change needs a version bump, a migration and a `MigrationTest` case. CI publishes the generated schema JSON to the `ci-screenshots` branch.
+- Code map: `data/` (entities, DAO, seed), `domain/` (pure logic + unit tests: 1RM, plates, weekly load, Strong CSV), `io/DataIO.kt` (backup/restore/export/import), `timer/` (rest timer service), `sleep/` (overnight tracker + smart alarm, YAMNet snore model in `assets/yamnet.tflite`, Apache-2.0), `steps/` (pedometer), `ui/` (Compose screens).

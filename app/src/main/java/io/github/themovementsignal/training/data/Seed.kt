@@ -39,6 +39,10 @@ object Settings {
     const val MONTHLY_SESSION_TARGET = "monthly_session_target"
     const val NEAT_WEEKLY_SESSIONS = "neat_weekly_sessions"
     const val NEAT_SESSION_MIN = "neat_session_min"
+    const val ALARM_TIME = "alarm_time"
+    const val ALARM_ON = "alarm_on"
+    const val ALARM_WINDOW = "alarm_window"
+    const val SNORE_ON = "snore_on"
 
     const val DEFAULT_PLATES = "25,20,15,10,5,2.5,1.25"
 }
@@ -178,7 +182,7 @@ suspend fun seedIfNeeded(db: AppDatabase) {
         template("Session 1 · Athletic Lower", 0, lowerSession)
         template("Session 2 · Push/Pull Upper", 1, upperSession)
         dao.insertTemplate(
-            Template(name = "Wednesday · Basketball or conditioning", kind = TemplateKind.ACTIVITY, sortOrder = 2)
+            Template(name = "Wednesday · Conditioning", kind = TemplateKind.ACTIVITY, sortOrder = 2)
         )
 
         val all = Equipment.all.joinToString(",")
@@ -221,4 +225,14 @@ suspend fun seedIfNeeded(db: AppDatabase) {
         dao.putSetting(Setting(Settings.NEAT_SESSION_MIN, "60"))
         dao.putSetting(Setting(Settings.SEEDED, "1"))
     }
+}
+
+/** One-off data updates for schema v2 (safe to call every launch). */
+suspend fun migrateDataV2(db: AppDatabase) {
+    val dao = db.dao()
+    if (dao.setting("data_v2") != null) return
+    dao.allTemplates()
+        .filter { it.kind == TemplateKind.ACTIVITY && it.name == "Wednesday · Basketball or conditioning" }
+        .forEach { dao.updateTemplate(it.copy(name = "Wednesday · Conditioning")) }
+    dao.putSetting(Setting("data_v2", "1"))
 }

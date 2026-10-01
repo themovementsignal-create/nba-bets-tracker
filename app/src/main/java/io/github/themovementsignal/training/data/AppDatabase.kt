@@ -1,6 +1,7 @@
 package io.github.themovementsignal.training.data
 
 import android.content.Context
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -16,9 +17,14 @@ import androidx.room.RoomDatabase
         Gear::class, GearUsage::class, Sleep::class, CheckIn::class, Niggle::class,
         BodyWeight::class, ProteinEntry::class, ProteinPreset::class, Supplement::class,
         SupplementLog::class, Bar::class, Venue::class, JumpTest::class, Setting::class,
+        SleepSample::class, DailySteps::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
+    autoMigrations = [
+        // v2: conditioning kind, tracked-sleep summary columns, sleep samples, daily steps (additions only).
+        AutoMigration(from = 1, to = 2),
+    ],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun dao(): TrainingDao

@@ -9,7 +9,7 @@ adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 adb logcat -c || true
 
 adb shell am instrument -w -r \
-  -e class "$PKG.UiTourTest" \
+  -e class "$PKG.MigrationTest,$PKG.UiTourTest" \
   "$PKG.test/androidx.test.runner.AndroidJUnitRunner" | tee instrument.txt
 
 mkdir -p out/screens

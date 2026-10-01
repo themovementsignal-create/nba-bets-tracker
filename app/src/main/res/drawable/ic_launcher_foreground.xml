@@ -3,19 +3,15 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Agon mark: a bold "A" whose crossbar is a loaded barbell. Kept inside the 66dp safe zone. -->
+    <!-- Sig mark: a bold gold "S" with a barbell bar through the middle. Inside the 66dp safe zone. -->
     <path
         android:fillColor="#00000000"
         android:strokeColor="#FFF5C542"
-        android:strokeWidth="8"
+        android:strokeWidth="9"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:pathData="M38,77 L54,31 L70,77" />
-    <!-- Bar -->
-    <path android:fillColor="#FFF5C542" android:pathData="M28,61.5h52v4h-52z" />
-    <!-- Plates -->
-    <path android:fillColor="#FFF5C542" android:pathData="M30.5,53h5v21h-5z" />
-    <path android:fillColor="#FFF5C542" android:pathData="M72.5,53h5v21h-5z" />
-    <path android:fillColor="#FFF5C542" android:pathData="M26,57h4v13h-4z" />
-    <path android:fillColor="#FFF5C542" android:pathData="M78,57h4v13h-4z" />
+        android:pathData="M68,37 C64,30 44,30 41,39 C38,48 50,51 54,52 C58,53 70,56 67,66 C64,76 44,77 39,69" />
+    <path android:fillColor="#FFF5C542" android:pathData="M30,51h48v3h-48z" />
+    <path android:fillColor="#FFF5C542" android:pathData="M27,45h4v15h-4z" />
+    <path android:fillColor="#FFF5C542" android:pathData="M77,45h4v15h-4z" />
 </vector>

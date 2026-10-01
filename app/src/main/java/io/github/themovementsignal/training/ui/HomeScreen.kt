@@ -26,6 +26,7 @@ import io.github.themovementsignal.training.Graph
 import io.github.themovementsignal.training.data.SessionType
 import io.github.themovementsignal.training.data.Settings
 import io.github.themovementsignal.training.domain.Calc
+import io.github.themovementsignal.training.sleep.SleepTracker
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -41,6 +42,8 @@ fun HomeScreen(nav: Nav) {
     val bodyweights by dao.bodyweights().collectAsState(initial = emptyList())
     val proteins by dao.proteins().collectAsState(initial = emptyList())
     val sleeps by dao.sleeps().collectAsState(initial = emptyList())
+    val steps by dao.dailySteps().collectAsState(initial = emptyList())
+    val tracking by SleepTracker.state.collectAsState()
     val checkIns by dao.checkIns().collectAsState(initial = emptyList())
     val niggles by dao.niggles().collectAsState(initial = emptyList())
     val gear by dao.gearWithWear().collectAsState(initial = emptyList())
@@ -82,16 +85,19 @@ fun HomeScreen(nav: Nav) {
     val tiles = listOf(
         Tile("Check-in", todaysCheckIn?.let { "Sl ${it.sleep} · So ${it.soreness} · En ${it.energy}" } ?: "Not done", Screen.CheckIn, todaysCheckIn != null),
         Tile("Sleep", when {
+            tracking != null -> "Tracking since ${fmtTime(tracking!!.startedAt)}"
             sleepingNow != null -> "In bed since ${fmtTime(sleepingNow.bedAt)}"
-            lastSleep != null -> "%.1f h".format((lastSleep.wakeAt!! - lastSleep.bedAt) / 3600_000.0) + (lastSleep.quality?.let { " · $it/5" } ?: "")
-            else -> "Tap at bed & wake"
+            lastSleep != null -> (lastSleep.score?.let { "Score $it · " } ?: "") +
+                "%.1f h".format((lastSleep.wakeAt!! - lastSleep.bedAt) / 3600_000.0) + (lastSleep.quality?.let { " · $it/5" } ?: "")
+            else -> "Smart alarm & tracking"
         }, Screen.Sleep, lastSleep?.wakeAt?.toLocalDate() == todayDate),
         Tile("Bodyweight", bodyweights.firstOrNull()?.let { "${Calc.fmt(it.kg)} kg" + if (it.day == today()) " today" else " · ${fmtDay(it.day)}" } ?: "No entries", Screen.Bodyweight, bodyweights.firstOrNull()?.day == today()),
         Tile("Protein", "$todayProtein / $proteinMin g", Screen.Protein, todayProtein >= proteinMin),
         Tile("Supplements", "${suppLog.size} / ${supplements.size}", Screen.Supplements, supplements.isNotEmpty() && suppLog.size >= supplements.size),
         Tile("Sauna", saunas.firstOrNull()?.let { fmtDate(it.at) } ?: "None yet", Screen.Sauna, saunas.firstOrNull()?.at?.toLocalDate() == todayDate),
-        Tile("NEAT", "${neat.count { it.startedAt.toLocalDate().toEpochDay() >= weekStart }} / $neatTarget this week", Screen.Neat),
-        Tile("Basketball / cond.", sport.firstOrNull()?.let { "${SessionType.label(it.type)} ${fmtDate(it.startedAt)}" } ?: "None yet", Screen.Activity),
+        Tile("Steps & NEAT", "%,d steps · ".format(steps.firstOrNull { it.day == today() }?.steps ?: 0) +
+            "${neat.count { it.startedAt.toLocalDate().toEpochDay() >= weekStart }}/$neatTarget", Screen.Neat),
+        Tile("Conditioning", sport.firstOrNull()?.let { "${activityTitle(it).removePrefix("Conditioning · ")} ${fmtDate(it.startedAt)}" } ?: "None yet", Screen.Activity),
         Tile("Niggles", if (recentNiggles.isEmpty()) "None active" else "${recentNiggles.size} active", Screen.Niggle),
         Tile("Gear", if (gearNudges.isEmpty()) "All good" else "${gearNudges.size} to replace", Screen.Gear),
     )
@@ -100,7 +106,7 @@ fun HomeScreen(nav: Nav) {
         item {
             Column {
                 Text(
-                    "AGON",
+                    "SIG",
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.primary,
                     letterSpacing = 6.sp,
@@ -164,6 +170,8 @@ fun HomeScreen(nav: Nav) {
                 val neatWeek = neat.filter { it.startedAt.toLocalDate().toEpochDay() >= weekStart }
                 StatLine("NEAT", "${neatWeek.size} sessions · ${neatWeek.sumOf { it.durationMin }} min")
                 StatLine("Protein target hit", "$proteinHitDays of last 7 days")
+                val weekSteps = steps.filter { it.day >= weekStart }.sumOf { it.steps }
+                StatLine("Steps", "%,d (avg %,d/day)".format(weekSteps, weekSteps / (today() - weekStart + 1).toInt()))
             }
         }
         item {

@@ -11,6 +11,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import io.github.themovementsignal.training.MainActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -40,6 +43,7 @@ sealed interface Screen {
     data object Activity : Screen
     data object Gear : Screen
     data object Sleep : Screen
+    data class SleepNight(val id: Long) : Screen
     data object CheckIn : Screen
     data object Niggle : Screen
     data object Bodyweight : Screen
@@ -105,6 +109,15 @@ fun AppRoot() {
     val nav = remember { Nav() }
     var tabIndex by rememberSaveable { mutableStateOf(0) }
 
+    // Opened from the wake-up alarm notification: jump to the sleep screen.
+    val openRequest by MainActivity.openRequest.collectAsState()
+    LaunchedEffect(openRequest) {
+        if (openRequest == "sleep") {
+            if (nav.stack.lastOrNull() != Screen.Sleep) nav.go(Screen.Sleep)
+            MainActivity.openRequest.value = null
+        }
+    }
+
     val top = nav.stack.lastOrNull()
     if (top != null) {
         BackHandler { nav.back() }
@@ -151,6 +164,7 @@ private fun ScreenContent(s: Screen, nav: Nav) {
         Screen.Activity -> ActivityScreen(nav)
         Screen.Gear -> GearScreen(nav)
         Screen.Sleep -> SleepScreen(nav)
+        is Screen.SleepNight -> SleepNightScreen(s.id, nav)
         Screen.CheckIn -> CheckInScreen(nav)
         Screen.Niggle -> NiggleScreen(nav)
         Screen.Bodyweight -> BodyweightScreen(nav)

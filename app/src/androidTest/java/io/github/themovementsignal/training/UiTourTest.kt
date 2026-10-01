@@ -40,7 +40,11 @@ import java.io.File
 @RunWith(AndroidJUnit4::class)
 class UiTourTest {
 
-    private val permissions: GrantPermissionRule = GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS)
+    private val permissions: GrantPermissionRule = GrantPermissionRule.grant(
+        Manifest.permission.POST_NOTIFICATIONS,
+        Manifest.permission.RECORD_AUDIO,
+        Manifest.permission.ACTIVITY_RECOGNITION,
+    )
     private val compose = createAndroidComposeRule<MainActivity>()
 
     @get:Rule
@@ -194,11 +198,22 @@ class UiTourTest {
             tap("Save") // returns to More; the back() after this goes to the Today tab, which is fine.
         }
         openFromMore("Sleep", "sleep") {
-            tap("🌙 Going to bed")
-            waitFor("☀ I'm awake")
-            tap("☀ I'm awake")
-            waitFor("How did you sleep?")
-            shot("sleep-rate")
+            tap("🌙 Start sleep tracking")
+            waitFor("Tracking your sleep 🌙")
+            // Let the tracker record a couple of minutes (movement, loudness, snore model).
+            Thread.sleep(125_000)
+            compose.waitForIdle()
+            shot("sleep-tracking")
+            tap("Stop · I'm awake")
+            waitFor("Good morning — how did you sleep?")
+            shot("sleep-morning")
+            tap("See last night ›")
+            waitFor("Sleep stages (estimated)")
+            shot("sleep-night-detail")
+            back()
+            compose.onAllNodesWithText("4")[0].performClick()
+            compose.waitForIdle()
+            shot("sleep-rated")
         }
         openFromMore("Bodyweight", "bodyweight") {
             compose.onAllNodes(hasSetTextAction())[0].performTextInput("99.2")
@@ -228,7 +243,9 @@ class UiTourTest {
             tap("Stop & save")
             waitFor("Start timer")
         }
-        openFromMore("Basketball & conditioning", "activity") {
+        openFromMore("Conditioning", "activity") {
+            tap("Rower")
+            tap("Bike")
             compose.onAllNodesWithText("7")[0].performClick()
             tap("Save")
             waitFor("Saved ✓")

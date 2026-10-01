@@ -3,9 +3,13 @@ package io.github.themovementsignal.training
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import io.github.themovementsignal.training.data.AppDatabase
 import io.github.themovementsignal.training.data.TrainingDao
+import io.github.themovementsignal.training.data.migrateDataV2
 import io.github.themovementsignal.training.data.seedIfNeeded
+import io.github.themovementsignal.training.steps.Steps
 import io.github.themovementsignal.training.io.DataIO
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -29,9 +33,11 @@ class TrainingApp : Application() {
         Graph.db = AppDatabase.build(this)
         Graph.scope.launch {
             seedIfNeeded(Graph.db)
+            migrateDataV2(Graph.db)
             DataIO.autoBackupIfDue(this@TrainingApp)
         }
         createChannels()
+        Steps.scheduleNightly(this)
     }
 
     private fun createChannels() {
@@ -45,10 +51,31 @@ class TrainingApp : Application() {
                 vibrationPattern = longArrayOf(0, 400, 200, 400)
             }
         )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_SLEEP, "Sleep tracking (running)", NotificationManager.IMPORTANCE_LOW)
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_SLEEP_ALARM, "Wake-up alarm", NotificationManager.IMPORTANCE_HIGH).apply {
+                // The tracker plays the alarm itself; the channel stays silent to avoid a double sound.
+                setSound(null, null)
+                enableVibration(false)
+            }
+        )
+        // Only used if sleep tracking died overnight: this one makes the alarm sound itself.
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_SLEEP_BACKUP, "Wake-up alarm (backup)", NotificationManager.IMPORTANCE_HIGH).apply {
+                val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                setSound(uri, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build())
+                enableVibration(true)
+            }
+        )
     }
 
     companion object {
         const val CHANNEL_TIMER = "rest_timer"
         const val CHANNEL_TIMER_DONE = "rest_timer_done"
+        const val CHANNEL_SLEEP = "sleep_tracking"
+        const val CHANNEL_SLEEP_ALARM = "sleep_alarm"
+        const val CHANNEL_SLEEP_BACKUP = "sleep_alarm_backup"
     }
 }

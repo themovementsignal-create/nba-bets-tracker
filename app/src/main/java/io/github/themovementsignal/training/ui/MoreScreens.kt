@@ -67,7 +67,7 @@ fun MoreScreen(nav: Nav) {
                 listOf(
                     "Morning check-in" to Screen.CheckIn, "Sleep" to Screen.Sleep, "Bodyweight" to Screen.Bodyweight,
                     "Protein" to Screen.Protein, "Supplements" to Screen.Supplements, "Sauna" to Screen.Sauna,
-                    "NEAT · treadmill" to Screen.Neat, "Basketball & conditioning" to Screen.Activity,
+                    "NEAT · treadmill" to Screen.Neat, "Conditioning" to Screen.Activity,
                     "Niggles" to Screen.Niggle, "Gear" to Screen.Gear,
                 ),
                 nav,

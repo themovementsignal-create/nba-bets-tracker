@@ -24,9 +24,11 @@ Kotlin, Jetpack Compose, Material 3, Room (SQLite), Health Connect (Phase 3). Mi
 ## Phase 2: Extras
 - [x] Sauna log: rounds, minutes, °C, cold contrast; prefilled with 3 rounds × 12–15 min at 80–100°C
 - [x] NEAT: treadmill timer plus manual entry; weekly target of 3–4 sessions × 60 min
-- [x] Basketball and conditioning: duration + session RPE (1–10)
+- [x] Conditioning: what you did (Rower, Bike, Sled, Circuit, Run, Other) + duration + session RPE (1–10)
 - [x] Gear tracker: shoes, shirts, shorts and so on; default gear per session type; wear counted by sessions and age; replacement nudges at a set lifespan
 - [x] Sleep: tap at bed and wake, rate quality 1–5
+- [ ] Sleep tracking like Sleep Cycle: phone on the mattress, movement-based sleep stages, on-device YAMNet snore detection, smart alarm in a wake window, nightly score
+- [ ] Pedometer: daily steps from the phone's step counter
 - [x] Morning check-in: sleep, soreness, energy (1–5 each)
 - [x] Niggle log: tap a body map region and side, severity 0–10, notes
 - [x] Bodyweight log with 7-day average; target 98 kg
@@ -34,7 +36,7 @@ Kotlin, Jetpack Compose, Material 3, Room (SQLite), Health Connect (Phase 3). Mi
 - [x] Daily supplement checklist (editable list)
 
 ## Phase 3: Data and dashboard
-- [ ] Health Connect: read steps (and sleep if available)
+- [ ] Health Connect: read steps (and sleep if available) — deferred; using the phone pedometer instead
 - [x] Dashboard: sessions vs a 7-per-month target, weekly load (session RPE × minutes) with spike flags, sauna and NEAT minutes, bodyweight trend, protein adherence, sleep vs performance
 - [x] Jump height test: record slow-mo video, step through frames, mark takeoff and landing; height = g·t²/8 — confirm with a real slow-mo video
 - [x] Venue profiles: equipment per gym, with automatic exercise substitutions when something's missing

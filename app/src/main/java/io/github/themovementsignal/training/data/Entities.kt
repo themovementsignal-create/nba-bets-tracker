@@ -1,5 +1,6 @@
 package io.github.themovementsignal.training.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -146,7 +147,14 @@ data class Activity(
     val durationMin: Int,
     val rpe: Int? = null,
     val notes: String = "",
+    /** For conditioning: what was done (Rower, Bike, Sled…). Added in schema v2. */
+    @ColumnInfo(defaultValue = "") val kind: String = "",
 )
+
+/** Conditioning options shown in the dropdown. */
+object ConditioningKind {
+    val all = listOf("Rower", "Bike", "Sled", "Circuit", "Run", "Other")
+}
 
 @Entity(tableName = "sauna", indices = [Index("at")])
 data class SaunaSession(
@@ -190,6 +198,33 @@ data class Sleep(
     val bedAt: Long,
     val wakeAt: Long? = null,
     val quality: Int? = null,
+    // ---- Added in schema v2: tracked nights (phone on the bed) ----
+    @ColumnInfo(defaultValue = "0") val tracked: Boolean = false,
+    val alarmAt: Long? = null,
+    val score: Int? = null,
+    val deepMin: Int? = null,
+    val lightMin: Int? = null,
+    val remMin: Int? = null,
+    val awakeMin: Int? = null,
+    val snoreMin: Int? = null,
+)
+
+/** One minute of a tracked night: movement from the accelerometer, loudness and snoring from the microphone. */
+@Entity(tableName = "sleep_sample", indices = [Index("sleepId")])
+data class SleepSample(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sleepId: Long,
+    val at: Long,
+    val movement: Float,
+    val noiseDb: Float,
+    val snoreSec: Int,
+)
+
+/** Steps per day from the phone's step counter. */
+@Entity(tableName = "daily_steps")
+data class DailySteps(
+    @PrimaryKey val day: Long,
+    val steps: Int,
 )
 
 @Entity(tableName = "checkin", indices = [Index(value = ["day"], unique = true)])

@@ -24,6 +24,8 @@ android {
         versionCode = providers.gradleProperty("versionCode").orElse("1").get().toInt()
         versionName = "0.1.$versionCode"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Phones (arm64) and the CI emulator (x86_64) only; keeps the snore model's native code small.
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
     signingConfigs {
@@ -48,6 +50,9 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    // The YAMNet model is memory-mapped from assets, so it must stay uncompressed.
+    androidResources { noCompress += "tflite" }
 
     buildFeatures {
         compose = true
@@ -77,6 +82,8 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
+    // On-device sound classification (YAMNet) for snore detection.
+    implementation(libs.mediapipe.tasks.audio)
     testImplementation(libs.junit)
 
     // Test-only: emulator UI tour run by CI (not shipped in the app).
@@ -86,5 +93,6 @@ dependencies {
     androidTestImplementation(libs.androidx.test.rules)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)
+    androidTestImplementation(libs.androidx.room.testing)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

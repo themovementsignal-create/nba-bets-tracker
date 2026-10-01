@@ -266,8 +266,37 @@ interface TrainingDao {
     @Update
     suspend fun updateSleep(s: Sleep)
 
+    /** Deletes a night and its per-minute samples. */
     @Query("DELETE FROM sleep WHERE id = :id")
-    suspend fun deleteSleep(id: Long)
+    suspend fun deleteSleepRow(id: Long)
+
+    @Query("DELETE FROM sleep_sample WHERE sleepId = :sleepId")
+    suspend fun deleteSleepSamples(sleepId: Long)
+
+    @Query("SELECT * FROM sleep WHERE id = :id")
+    suspend fun sleep(id: Long): Sleep?
+
+    @Query("SELECT * FROM sleep WHERE id = :id")
+    fun sleepFlow(id: Long): Flow<Sleep?>
+
+    @Insert
+    suspend fun insertSleepSample(s: SleepSample)
+
+    @Query("SELECT * FROM sleep_sample WHERE sleepId = :sleepId ORDER BY at")
+    suspend fun sleepSamples(sleepId: Long): List<SleepSample>
+
+    @Query("SELECT * FROM sleep_sample WHERE sleepId = :sleepId ORDER BY at")
+    fun sleepSamplesFlow(sleepId: Long): Flow<List<SleepSample>>
+
+    // ---------- Steps ----------
+    @Query("SELECT * FROM daily_steps ORDER BY day DESC")
+    fun dailySteps(): Flow<List<DailySteps>>
+
+    @Query("SELECT * FROM daily_steps WHERE day = :day")
+    suspend fun stepsOn(day: Long): DailySteps?
+
+    @Upsert
+    suspend fun upsertSteps(s: DailySteps)
 
     // ---------- Check-in ----------
     @Query("SELECT * FROM checkin ORDER BY day DESC")
