@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import io.github.themovementsignal.training.timer.RestTimer
 import io.github.themovementsignal.training.ui.AppRoot
 import io.github.themovementsignal.training.ui.theme.TrainingTheme
 
@@ -29,5 +30,15 @@ class MainActivity : ComponentActivity() {
                 AppRoot()
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        RestTimer.appVisible = true
+    }
+
+    override fun onPause() {
+        RestTimer.appVisible = false
+        super.onPause()
     }
 }

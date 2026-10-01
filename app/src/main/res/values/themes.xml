@@ -1,6 +1,7 @@
 <resources>
-    <!-- Window theme only; all real styling is done in Compose. Dark so there is no white flash on launch. -->
+    <!-- Window theme only; all real styling is done in Compose. Near-black so there is no flash on launch. -->
     <style name="Theme.Training" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowBackground">@color/agon_ink</item>
+        <item name="android:colorAccent">@color/agon_gold</item>
     </style>
 </resources>

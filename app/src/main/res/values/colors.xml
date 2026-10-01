@@ -1,3 +1,5 @@
 <resources>
-    <color name="ic_launcher_background">#FF2E7D32</color>
+    <color name="ic_launcher_background">#FF0D0D0E</color>
+    <color name="agon_ink">#FF0D0D0E</color>
+    <color name="agon_gold">#FFF5C542</color>
 </resources>

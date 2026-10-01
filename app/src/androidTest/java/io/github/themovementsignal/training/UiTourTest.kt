@@ -15,6 +15,7 @@ import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
@@ -119,8 +120,14 @@ class UiTourTest {
         compose.waitForIdle()
         compose.onAllNodesWithText("✓")[1].performClick()
         compose.waitForIdle()
+        Espresso.closeSoftKeyboard()
+        compose.waitForIdle()
+        shot("workout-inline-rest-timer")
+        // Big rest timer from the header pill: ring, −15/+15, Skip.
+        compose.onNodeWithTag("restPill").performClick()
         waitFor("Skip")
-        shot("workout-two-sets-rest-timer")
+        shot("rest-timer-dialog")
+        tap("+15s")
         tap("Skip")
 
         // Exercise menu → plate calculator.

@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.themovementsignal.training.Graph
 import io.github.themovementsignal.training.data.SessionType
 import io.github.themovementsignal.training.data.Settings
@@ -97,7 +98,15 @@ fun HomeScreen(nav: Nav) {
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            Text(todayDate.format(DateTimeFormatter.ofPattern("EEEE d MMMM")), style = MaterialTheme.typography.headlineSmall)
+            Column {
+                Text(
+                    "AGON",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    letterSpacing = 6.sp,
+                )
+                Text(todayDate.format(DateTimeFormatter.ofPattern("EEEE d MMMM")), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         active?.let { w ->
             item {
