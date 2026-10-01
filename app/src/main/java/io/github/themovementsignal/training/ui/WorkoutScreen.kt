@@ -47,8 +47,10 @@ import io.github.themovementsignal.training.data.ExerciseType
 import io.github.themovementsignal.training.data.WorkoutSet
 import io.github.themovementsignal.training.domain.Calc
 import io.github.themovementsignal.training.timer.RestTimer
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun WorkoutScreen(workoutId: Long, nav: Nav) {
@@ -151,8 +153,11 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
             onFinish = { rpe, notes ->
                 showFinish = false
                 RestTimer.stop(context)
-                scope.launch { Actions.finishWorkout(workoutId, rpe, notes) }
-                nav.replace(Screen.WorkoutDetail(workoutId))
+                // Finish first, then navigate (leaving the screen would cancel the work).
+                scope.launch {
+                    withContext(NonCancellable) { Actions.finishWorkout(workoutId, rpe, notes) }
+                    nav.replace(Screen.WorkoutDetail(workoutId))
+                }
             },
         )
     }
@@ -161,7 +166,13 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
             title = "Discard workout?",
             text = "This deletes this workout and all its sets.",
             confirm = "Discard",
-            onConfirm = { scope.launch { Actions.discardWorkout(workoutId) }; nav.back() },
+            onConfirm = {
+                RestTimer.stop(context)
+                scope.launch {
+                    withContext(NonCancellable) { Actions.discardWorkout(workoutId) }
+                    nav.back()
+                }
+            },
             onDismiss = { showDiscard = false },
         )
     }

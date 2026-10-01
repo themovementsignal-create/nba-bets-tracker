@@ -36,7 +36,9 @@ import io.github.themovementsignal.training.data.Template
 import io.github.themovementsignal.training.data.TemplateExercise
 import io.github.themovementsignal.training.data.TemplateKind
 import io.github.themovementsignal.training.data.Venue
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun TrainScreen(nav: Nav) {
@@ -231,8 +233,10 @@ fun TemplateEditScreen(templateId: Long, nav: Nav) {
     }
     if (confirmDelete) {
         ConfirmDialog("Delete template?", "Past workouts are kept.", onConfirm = {
-            scope.launch { dao.deleteTemplateExercises(templateId); dao.deleteTemplate(templateId) }
-            nav.back()
+            scope.launch {
+                withContext(NonCancellable) { dao.deleteTemplateExercises(templateId); dao.deleteTemplate(templateId) }
+                nav.back()
+            }
         }, onDismiss = { confirmDelete = false })
     }
 }

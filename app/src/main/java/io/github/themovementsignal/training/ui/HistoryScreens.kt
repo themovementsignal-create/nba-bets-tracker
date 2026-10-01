@@ -44,7 +44,9 @@ import io.github.themovementsignal.training.data.ExerciseType
 import io.github.themovementsignal.training.data.SetWithTime
 import io.github.themovementsignal.training.data.WorkoutSet
 import io.github.themovementsignal.training.domain.Calc
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // ---------- Personal records ----------
 
@@ -201,8 +203,10 @@ fun WorkoutDetailScreen(workoutId: Long, nav: Nav) {
     }
     if (confirmDelete) {
         ConfirmDialog("Delete workout?", "This permanently deletes this workout and its sets.", onConfirm = {
-            scope.launch { Actions.deleteWorkout(workoutId) }
-            nav.back()
+            scope.launch {
+                withContext(NonCancellable) { Actions.deleteWorkout(workoutId) }
+                nav.back()
+            }
         }, onDismiss = { confirmDelete = false })
     }
 }

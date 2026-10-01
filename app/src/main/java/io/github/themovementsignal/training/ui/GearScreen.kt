@@ -16,7 +16,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -83,7 +82,6 @@ fun GearScreen(nav: Nav) {
 @Composable
 private fun GearDialog(existing: Gear?, onDismiss: () -> Unit) {
     val dao = Graph.dao
-    val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf(existing?.name.orEmpty()) }
     var category by remember { mutableStateOf(existing?.category ?: "Shoes") }
     var daysAgo by remember { mutableStateOf(existing?.let { (today() - it.startDay).toString() } ?: "0") }
@@ -133,7 +131,8 @@ private fun GearDialog(existing: Gear?, onDismiss: () -> Unit) {
                     retired = retired,
                     notes = existing?.notes.orEmpty(),
                 )
-                scope.launch { if (existing == null) dao.insertGear(g) else dao.updateGear(g) }
+                // App-wide scope: the dialog's own scope is cancelled as soon as it closes.
+                Graph.scope.launch { if (existing == null) dao.insertGear(g) else dao.updateGear(g) }
                 onDismiss()
             }) { Text("Save") }
         },
@@ -141,7 +140,7 @@ private fun GearDialog(existing: Gear?, onDismiss: () -> Unit) {
     )
     if (confirmDelete && existing != null) {
         ConfirmDialog("Delete ${existing.name}?", "Its wear history is deleted too. Use Retired to keep history.", onConfirm = {
-            scope.launch { dao.deleteGearUsageForGear(existing.id); dao.deleteGearRow(existing.id) }
+            Graph.scope.launch { dao.deleteGearUsageForGear(existing.id); dao.deleteGearRow(existing.id) }
             onDismiss()
         }, onDismiss = { confirmDelete = false })
     }
