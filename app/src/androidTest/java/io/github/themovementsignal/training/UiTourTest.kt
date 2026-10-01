@@ -13,7 +13,10 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -257,6 +260,20 @@ class UiTourTest {
         tap("Start")
         waitFor("Session 1 · Athletic Lower · Hotel gym")
         shot("travel-workout")
+        // Drag the first exercise down below the second (long-press its header, then slide).
+        compose.onAllNodesWithTag("exerciseHeader")[0].performTouchInput {
+            down(center)
+            advanceEventTime(1_000)
+            repeat(30) { moveBy(Offset(0f, 40f)); advanceEventTime(16) }
+            up()
+        }
+        compose.waitForIdle()
+        compose.waitUntil(10_000) {
+            val first = compose.onAllNodesWithText("DB Romanian Deadlift").fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.top
+            val second = compose.onAllNodesWithText("Bulgarian Split Squat").fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.top
+            first != null && second != null && first > second
+        }
+        shot("travel-workout-reordered")
         scrollTo("Discard workout")
         tap("Discard workout")
         tapInDialog("Discard")

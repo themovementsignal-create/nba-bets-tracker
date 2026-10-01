@@ -21,6 +21,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.draw.zIndex
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -115,6 +122,12 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); delay(250) } }
 
+    val listState = rememberLazyListState()
+    // Drag-to-reorder: local order while dragging, saved to the database on release.
+    var localOrder by remember { mutableStateOf<List<Long>?>(null) }
+    var dragKey by remember { mutableStateOf<Long?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+
     var showFinish by remember { mutableStateOf(false) }
     var showDiscard by remember { mutableStateOf(false) }
     var showTimer by remember { mutableStateOf(false) }
@@ -146,9 +159,56 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
             Box(Modifier.fillMaxSize().padding(padding)) { Muted("Loading…", Modifier.padding(16.dp)) }
             return@Scaffold
         }
-        val groups = sets.groupBy { it.exerciseOrder }.toSortedMap()
+        // Each exercise group is identified by its first set id, which stays stable when reordered.
+        val groupsById = sets.groupBy { it.exerciseOrder }.toSortedMap().values.associateBy { g -> g.minOf { it.id } }
+        val dbOrder = groupsById.keys.toList()
+        LaunchedEffect(dbOrder) { if (localOrder == dbOrder) localOrder = null }
+        val shown = localOrder?.let { local -> local.filter { it in groupsById } + dbOrder.filter { it !in local } } ?: dbOrder
+        val currentShown by rememberUpdatedState(shown)
+        val currentDbOrder by rememberUpdatedState(dbOrder)
+
+        fun handleDrag(dy: Float) {
+            val key = dragKey ?: return
+            val order = localOrder ?: return
+            dragOffset += dy
+            val visible = listState.layoutInfo.visibleItemsInfo
+            val info = visible.firstOrNull { it.key == key } ?: return
+            val top = info.offset + dragOffset
+            val bottom = top + info.size
+            val idx = order.indexOf(key)
+            if (dy > 0 && idx in 0 until order.lastIndex) {
+                val next = visible.firstOrNull { it.key == order[idx + 1] }
+                if (next != null && bottom > next.offset + next.size / 2f) {
+                    localOrder = order.toMutableList().apply { add(idx + 1, removeAt(idx)) }
+                    dragOffset -= (next.offset + next.size) - (info.offset + info.size)
+                }
+            } else if (dy < 0 && idx > 0) {
+                val prev = visible.firstOrNull { it.key == order[idx - 1] }
+                if (prev != null && top < prev.offset + prev.size / 2f) {
+                    localOrder = order.toMutableList().apply { add(idx - 1, removeAt(idx)) }
+                    dragOffset += info.offset - prev.offset
+                }
+            }
+            // Auto-scroll when dragging near the top or bottom edge.
+            val li = listState.layoutInfo
+            if (dy > 0 && bottom > li.viewportEndOffset - 160) dragOffset += listState.dispatchRawDelta(24f)
+            if (dy < 0 && top < li.viewportStartOffset + 160) dragOffset += listState.dispatchRawDelta(-24f)
+        }
+
+        fun endDrag() {
+            val final = localOrder
+            dragKey = null
+            dragOffset = 0f
+            if (final != null && final != currentDbOrder) {
+                scope.launch { withContext(NonCancellable) { Actions.reorderExercises(workoutId, final) } }
+            } else {
+                localOrder = null
+            }
+        }
+
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
+            state = listState,
             contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -156,10 +216,26 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
                 val done = sets.count { it.completed }
                 Muted("$done of ${sets.size} sets done")
             }
-            items(groups.entries.toList(), key = { it.key }) { (order, groupSets) ->
+            items(shown, key = { it }) { groupId ->
+                val groupSets = groupsById.getValue(groupId)
+                val order = groupSets.first().exerciseOrder
                 val ex = allExercises[groupSets.first().exerciseId]
-                if (ex != null) {
+                val dragging = dragKey == groupId
+                val itemModifier = if (dragging) {
+                    Modifier.zIndex(1f).graphicsLayer { translationY = dragOffset; shadowElevation = 24f; scaleX = 1.02f; scaleY = 1.02f }
+                } else {
+                    Modifier.animateItem()
+                }
+                if (ex != null) Box(itemModifier) {
                     ExerciseBlock(
+                        dragHandle = Modifier.pointerInput(groupId) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { dragKey = groupId; dragOffset = 0f; localOrder = currentShown },
+                                onDrag = { change, amount -> change.consume(); handleDrag(amount.y) },
+                                onDragEnd = { endDrag() },
+                                onDragCancel = { endDrag() },
+                            )
+                        },
                         exercise = ex,
                         sets = groupSets.sortedBy { it.setIndex },
                         previous = previous[ex.id].orEmpty(),
@@ -269,6 +345,7 @@ private fun RestPill(rest: RestTimer.State?, now: Long, onClick: () -> Unit) {
 
 @Composable
 private fun ExerciseBlock(
+    dragHandle: Modifier,
     exercise: Exercise,
     sets: List<WorkoutSet>,
     previous: List<WorkoutSet>,
@@ -286,7 +363,14 @@ private fun ExerciseBlock(
 ) {
     var menu by remember { mutableStateOf(false) }
     SectionCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // Long-press anywhere on this header row to pick the exercise up and drag it.
+        Row(dragHandle.testTag("exerciseHeader"), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "≡",
+                Modifier.padding(end = 8.dp),
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Text(
                 exercise.name,
                 Modifier.weight(1f).clickable { menu = true },

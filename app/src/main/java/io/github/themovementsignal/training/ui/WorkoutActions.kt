@@ -96,6 +96,22 @@ object Actions {
         }
     }
 
+    /** Saves a new exercise order. [groupIds] identify each exercise group by its first set id. */
+    suspend fun reorderExercises(workoutId: Long, groupIds: List<Long>) {
+        Graph.db.withTransaction {
+            val sets = dao.sets(workoutId)
+            val groups = sets.groupBy { it.exerciseOrder }.toSortedMap()
+            val idOf = groups.mapValues { (_, g) -> g.minOf { it.id } }
+            val ordered = groupIds.mapNotNull { id -> idOf.entries.firstOrNull { it.value == id }?.key } +
+                groups.keys.filter { k -> idOf[k] !in groupIds }
+            val newIndex = ordered.withIndex().associate { (i, oldOrder) -> oldOrder to i }
+            sets.forEach { s ->
+                val n = newIndex[s.exerciseOrder] ?: return@forEach
+                if (n != s.exerciseOrder) dao.updateSet(s.copy(exerciseOrder = n))
+            }
+        }
+    }
+
     suspend fun finishWorkout(workoutId: Long, rpe: Int?, notes: String) {
         Graph.db.withTransaction {
             val w = dao.workout(workoutId) ?: return@withTransaction
