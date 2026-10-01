@@ -13,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -119,12 +120,13 @@ fun SleepScreen(nav: Nav) {
                             val t = runCatching { LocalTime.parse(alarmTime) }.getOrDefault(LocalTime.of(6, 30))
                             TimePickerDialog(context, { _, h, m -> put(Settings.ALARM_TIME, "%02d:%02d".format(h, m)) }, t.hour, t.minute, true).show()
                         }) { Text("Change time") }
-                        Text("Wake-up window")
+                        Text("Wake-up window (minutes)")
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             listOf(0, 10, 20, 30, 45).forEach { w ->
-                                val label = if (w == 0) "Exact" else "$w min"
-                                if (w == window) Button(onClick = { }) { Text(label) }
-                                else OutlinedButton(onClick = { put(Settings.ALARM_WINDOW, w.toString()) }) { Text(label) }
+                                val label = if (w == 0) "Exact" else "$w"
+                                val pad = PaddingValues(horizontal = 4.dp)
+                                if (w == window) Button(onClick = { }, Modifier.weight(1f), contentPadding = pad) { Text(label, maxLines = 1) }
+                                else OutlinedButton(onClick = { put(Settings.ALARM_WINDOW, w.toString()) }, Modifier.weight(1f), contentPadding = pad) { Text(label, maxLines = 1) }
                             }
                         }
                     }

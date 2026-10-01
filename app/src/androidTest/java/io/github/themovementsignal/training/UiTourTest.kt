@@ -22,7 +22,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
-import androidx.test.espresso.Espresso
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -90,9 +91,17 @@ class UiTourTest {
         compose.waitForIdle()
     }
 
+    /** Hides the keyboard without needing window focus (system pop-ups on the emulator can steal it). */
+    private fun hideKeyboard() {
+        compose.activityRule.scenario.onActivity {
+            WindowCompat.getInsetsController(it.window, it.window.decorView).hide(WindowInsetsCompat.Type.ime())
+        }
+        compose.waitForIdle()
+    }
+
     private fun back() {
-        Espresso.closeSoftKeyboard()
-        Espresso.pressBack()
+        hideKeyboard()
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.waitForIdle()
     }
 
@@ -127,7 +136,7 @@ class UiTourTest {
         compose.waitForIdle()
         compose.onAllNodesWithText("✓")[1].performClick()
         compose.waitForIdle()
-        Espresso.closeSoftKeyboard()
+        hideKeyboard()
         compose.waitForIdle()
         shot("workout-inline-rest-timer")
         // Big rest timer from the header pill: ring, −15/+15, Skip.
@@ -174,7 +183,7 @@ class UiTourTest {
         compose.waitForIdle()
         compose.onAllNodesWithText("✓")[0].performClick()
         waitFor("🏆 PR")
-        Espresso.closeSoftKeyboard()
+        hideKeyboard()
         compose.waitForIdle()
         shot("workout-live-pr")
         tap("Finish")
