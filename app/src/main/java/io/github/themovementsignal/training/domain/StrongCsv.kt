@@ -4,6 +4,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * Tolerant parser for Strong app CSV exports.
@@ -52,12 +53,18 @@ object StrongCsv {
         if (records.isEmpty()) return Result(emptyList(), 0, listOf("No rows found"))
 
         val header = records.first().map { normalise(it) }
-        fun col(vararg names: String): Int = names.firstNotNullOfOrNull { n ->
-            header.indexOf(n).takeIf { it >= 0 }
-        } ?: names.firstNotNullOfOrNull { n -> header.indexOfFirst { it.startsWith(n) }.takeIf { it >= 0 } } ?: -1
+        // For each candidate name in order: exact header match first, then a header that starts with it
+        // (so "Weight (kg)" matches "weight").
+        fun col(vararg names: String): Int {
+            for (n in names) {
+                header.indexOf(n).takeIf { it >= 0 }?.let { return it }
+                header.indexOfFirst { it.startsWith(n) }.takeIf { it >= 0 }?.let { return it }
+            }
+            return -1
+        }
 
         val cDate = col("date")
-        val cWorkout = col("workoutname", "workout")
+        val cWorkout = col("workoutname", "routinename", "title")
         val cDuration = col("duration")
         val cExercise = col("exercisename", "exercise")
         val cSetOrder = col("setorder", "set")
@@ -77,6 +84,8 @@ object StrongCsv {
         if (cDate < 0 || cExercise < 0) return Result(emptyList(), records.size - 1, problems)
 
         val weightHeader = header.getOrNull(cWeight).orEmpty()
+        // Newer exports use "Duration (sec)"; older ones "1h 5m".
+        val durationInSeconds = header.getOrNull(cDuration).orEmpty().contains("sec")
         val distanceHeader = header.getOrNull(cDistance).orEmpty()
 
         val rows = mutableListOf<Row>()
@@ -114,7 +123,11 @@ object StrongCsv {
             rows += Row(
                 start = start,
                 workoutName = get(cWorkout).ifEmpty { "Imported workout" },
-                durationMin = parseDurationMinutes(get(cDuration)),
+                durationMin = if (durationInSeconds) {
+                    Calc.parseNumber(get(cDuration))?.let { (it / 60.0).roundToInt() } ?: parseDurationMinutes(get(cDuration))
+                } else {
+                    parseDurationMinutes(get(cDuration))
+                },
                 exercise = exercise,
                 kind = kind,
                 setOrder = setOrderRaw.filter { it.isDigit() }.toIntOrNull() ?: 0,

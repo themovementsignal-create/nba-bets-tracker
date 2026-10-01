@@ -49,6 +49,24 @@ class StrongCsvTest {
         assertEquals(LocalDateTime.of(2024, 3, 4, 7, 30), r.workouts[0].start)
     }
 
+    @Test fun newerStrongExportWithWorkoutNumberAndSeconds() {
+        val csv = listOf(
+            "Workout #;Date;Workout Name;Duration (sec);Exercise Name;Set Order;Weight (kg);Reps;RPE;Distance (meters);Seconds;Notes;Workout Notes",
+            "12;2025-06-01 18:00:00;Upper;3720;Chin Up;1;10;6;;;;;",
+            "12;2025-06-01 18:00:00;Upper;3720;Sled Push;1;80;;;20;;;",
+            "12;2025-06-01 18:00:00;Upper;3720;Chin Up;Rest Timer;;;;;90;;",
+        ).joinToString("\n")
+        val r = StrongCsv.parse(csv)
+        assertEquals(1, r.workouts.size)
+        val w = r.workouts[0]
+        assertEquals("Upper", w.name)
+        assertEquals(62, w.durationMin)
+        assertEquals(2, w.rows.size)
+        assertEquals(10.0, w.rows[0].weightKg!!, 1e-9)
+        assertEquals(20.0, w.rows[1].distanceM!!, 1e-9)
+        assertEquals(1, r.skippedRows)
+    }
+
     @Test fun missingColumns() {
         val r = StrongCsv.parse("foo,bar\n1,2\n")
         assertEquals(0, r.workouts.size)
