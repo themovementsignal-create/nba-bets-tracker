@@ -158,6 +158,29 @@ class UiTourTest {
         shot("exercise-detail")
         back()
 
+        // ---- Second Session 1: Previous shows last time's numbers; beating them is a PR ----
+        tab("Train")
+        tap("Start")
+        waitFor("100 × 5")
+        shot("workout-previous-numbers")
+        compose.onAllNodes(hasSetTextAction())[0].performTextInput("110")
+        compose.waitForIdle()
+        compose.onAllNodesWithText("✓")[0].performClick()
+        waitFor("🏆 PR")
+        Espresso.closeSoftKeyboard()
+        compose.waitForIdle()
+        shot("workout-live-pr")
+        tap("Finish")
+        waitFor("Session RPE (how hard was it overall?)")
+        tapInDialog("8")
+        tapInDialog("Finish")
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("PRs").fetchSemanticsNodes().isNotEmpty() }
+        shot("workout-summary-pr")
+        back()
+        tab("History")
+        waitFor("Best set")
+        shot("history-two-workouts")
+
         // ---- Logs ----
         openFromMore("Morning check-in", "checkin") {
             compose.onAllNodesWithText("4")[0].performClick()
