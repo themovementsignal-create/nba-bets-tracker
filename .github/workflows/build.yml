@@ -3,6 +3,7 @@ name: Build
 # Every push builds the app. Only pushes to main publish a GitHub Release.
 on:
   push:
+    branches-ignore: [ci-screenshots]
   workflow_dispatch:
 
 permissions:

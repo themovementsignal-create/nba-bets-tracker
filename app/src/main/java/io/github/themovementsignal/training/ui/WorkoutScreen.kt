@@ -216,10 +216,14 @@ private fun ExerciseBlock(
             Box(Modifier.width(64.dp))
         }
         var workingNumber = 0
-        sets.forEach { s ->
+        var workingIndex = 0
+        sets.forEachIndexed { i, s ->
             val label = if (s.kind == "W") "W" else { workingNumber++; if (s.kind.isNotEmpty()) "$workingNumber${s.kind}" else "$workingNumber" }
-            val prev = previous.getOrNull(s.setIndex) ?: previous.lastOrNull()
-            key(s.id) { SetRow(exercise, s, label, prev) }
+            // Warm-ups aren't matched against last session's working sets.
+            val prev = if (s.kind == "W") null else (previous.getOrNull(workingIndex) ?: previous.lastOrNull())
+            if (s.kind != "W") workingIndex++
+            val above = sets.getOrNull(i - 1)
+            key(s.id) { SetRow(exercise, s, label, prev, above) }
         }
         TextButton(onClick = onAddSet, modifier = Modifier.fillMaxWidth()) { Text("+ Add set") }
     }
@@ -243,7 +247,7 @@ private fun targetPlaceholder(type: String, target: String): String {
 }
 
 @Composable
-private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: WorkoutSet?) {
+private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: WorkoutSet?, above: WorkoutSet?) {
     val dao = Graph.dao
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -259,12 +263,14 @@ private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: Wor
             }
         )
     }
-    val weightHint = prev?.weightKg?.let { Calc.fmt(it) } ?: if (type == ExerciseType.BODYWEIGHT) "0" else ""
-    val secondHint = when (type) {
-        ExerciseType.TIMED -> prev?.seconds?.toString()
-        ExerciseType.LOAD_DISTANCE -> prev?.distanceM?.let { Calc.fmt(it) }
-        else -> prev?.reps?.toString()
-    } ?: targetPlaceholder(type, set.target)
+    // Placeholders: last session's numbers, else the set above in this workout, else the template target.
+    val weightHint = (prev?.weightKg ?: above?.weightKg)?.let { Calc.fmt(it) } ?: if (type == ExerciseType.BODYWEIGHT) "0" else ""
+    fun secondOf(x: WorkoutSet?) = when (type) {
+        ExerciseType.TIMED -> x?.seconds?.toString()
+        ExerciseType.LOAD_DISTANCE -> x?.distanceM?.let { Calc.fmt(it) }
+        else -> x?.reps?.toString()
+    }
+    val secondHint = secondOf(prev) ?: secondOf(above) ?: targetPlaceholder(type, set.target)
 
     fun build(completed: Boolean, w: String, s: String): WorkoutSet {
         val wVal = Calc.parseNumber(w)
