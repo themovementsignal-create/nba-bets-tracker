@@ -345,15 +345,21 @@ class SleepTrackerService : Service() {
         SleepTracker._state.value = live.copy(ringing = true, snoozedUntil = null)
         try {
             val picked = runBlocking { Graph.dao.setting(Settings.ALARM_SOUND) }
-            val uri = SleepTracker.alarmSound(this, picked)
-            player = MediaPlayer().apply {
-                setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
-                setDataSource(this@SleepTrackerService, uri)
-                isLooping = true
-                setVolume(0.05f, 0.05f)
-                prepare()
-                start()
+            fun play(uri: Uri?): MediaPlayer? = uri?.let {
+                runCatching {
+                    MediaPlayer().apply {
+                        setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+                        setDataSource(this@SleepTrackerService, it)
+                        isLooping = true
+                        setVolume(0.05f, 0.05f)
+                        prepare()
+                        start()
+                    }
+                }.getOrNull()
             }
+            // If the chosen sound can't be played (e.g. the file was deleted), use the phone's default.
+            player = play(SleepTracker.alarmSound(this, picked)) ?: play(SleepTracker.alarmSound(this, null))
+            if (player == null) ErrorLog.log("SLEEP", "No playable alarm sound", null)
             // Gentle wake: volume rises over about a minute.
             var step = 1
             handler.post(object : Runnable {
