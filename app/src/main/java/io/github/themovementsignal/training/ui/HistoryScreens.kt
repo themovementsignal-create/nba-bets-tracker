@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.themovementsignal.training.Graph
 import io.github.themovementsignal.training.data.Equipment
@@ -46,6 +47,7 @@ import io.github.themovementsignal.training.data.WorkoutSet
 import io.github.themovementsignal.training.domain.Calc
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlin.math.roundToLong
 import kotlinx.coroutines.withContext
 
 // ---------- Personal records ----------
@@ -102,6 +104,14 @@ fun personalRecords(type: String, history: List<SetWithTime>): List<PrLine> {
     return out
 }
 
+/** Volume in kg for sets with external load × reps (weight × reps and added-load bodyweight). */
+fun setVolume(type: String, s: WorkoutSet): Double = when (type) {
+    ExerciseType.WEIGHT_REPS, ExerciseType.BODYWEIGHT -> ((s.weightKg ?: 0.0).coerceAtLeast(0.0)) * (s.reps ?: 0)
+    else -> 0.0
+}
+
+fun fmtVolume(kg: Double): String = "%,d kg".format(kg.roundToLong())
+
 // ---------- History tab ----------
 
 @Composable
@@ -120,7 +130,12 @@ fun HistoryScreen(nav: Nav) {
 
 @Composable
 private fun WorkoutList(nav: Nav) {
-    val summaries by Graph.dao.workoutSummaries().collectAsState(initial = emptyList())
+    val dao = Graph.dao
+    val summaries by dao.workoutSummaries().collectAsState(initial = emptyList())
+    val allSets by dao.allCompletedSets().collectAsState(initial = emptyList())
+    var exercises by remember { mutableStateOf<Map<Long, Exercise>>(emptyMap()) }
+    LaunchedEffect(allSets.size) { exercises = dao.allExercises().associateBy { it.id } }
+    val setsByWorkout = allSets.groupBy { it.set.workoutId }
     if (summaries.isEmpty()) {
         Muted("No finished workouts yet. Start one from the Train tab, or import your Strong history in More → Backup & import.", Modifier.padding(16.dp))
         return
@@ -129,13 +144,32 @@ private fun WorkoutList(nav: Nav) {
         items(summaries, key = { it.workout.id }) { s ->
             val w = s.workout
             SectionCard(onClick = { nav.go(Screen.WorkoutDetail(w.id)) }) {
-                Text(w.name, style = MaterialTheme.typography.titleMedium)
+                Text(w.name, style = MaterialTheme.typography.titleLarge)
                 val dur = w.endedAt?.let { (it - w.startedAt) / 60_000 } ?: 0
                 Muted(
-                    "${fmtDateTime(w.startedAt)} · ${fmtMinutes(dur)} · ${s.setCount} sets" +
-                        (s.volume?.takeIf { it > 0 }?.let { " · ${Calc.fmt(it)} kg" } ?: "") +
+                    "${fmtDateTime(w.startedAt)} · ${fmtMinutes(dur)}" +
+                        (s.volume?.takeIf { it > 0 }?.let { " · ${fmtVolume(it)}" } ?: "") +
                         (w.rpe?.let { " · RPE $it" } ?: "")
                 )
+                val groups = setsByWorkout[w.id].orEmpty().groupBy { it.set.exerciseOrder }.toSortedMap().values
+                if (groups.isNotEmpty()) {
+                    Gap(8)
+                    Row {
+                        Text("Exercise", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Best set", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    groups.take(6).forEach { g ->
+                        val ex = exercises[g.first().set.exerciseId]
+                        val type = ex?.type ?: ExerciseType.WEIGHT_REPS
+                        val working = g.filter { it.set.kind != "W" }.ifEmpty { g }
+                        val best = working.maxByOrNull { setScore(type, it.set) }
+                        Row {
+                            Text("${working.size} × ${ex?.name ?: "…"}", Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (best != null) Text(describeSet(type, best.set), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    if (groups.size > 6) Muted("+ ${groups.size - 6} more")
+                }
             }
         }
     }
@@ -175,6 +209,19 @@ fun WorkoutDetailScreen(workoutId: Long, nav: Nav) {
                     Text(fmtDateTime(w.startedAt), style = MaterialTheme.typography.titleMedium)
                     val dur = (w.endedAt ?: System.currentTimeMillis()) - w.startedAt
                     Muted("Duration ${fmtMinutes(dur / 60_000)}" + (w.rpe?.let { " · session RPE $it · load ${it * (dur / 60_000)}" } ?: ""))
+                    val done = sets.filter { it.completed }
+                    val volume = done.sumOf { setVolume(exercises[it.exerciseId]?.type ?: ExerciseType.WEIGHT_REPS, it) }
+                    val prCount = done.filter { it.kind != "W" }.groupBy { it.exerciseId }.count { (exId, g) ->
+                        val type = exercises[exId]?.type ?: ExerciseType.WEIGHT_REPS
+                        val bar = bestBefore[exId] ?: -1.0
+                        bar > 0 && g.any { setScore(type, it) > bar }
+                    }
+                    Gap(8)
+                    Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                        SummaryStat("Volume", fmtVolume(volume))
+                        SummaryStat("Sets", done.size.toString())
+                        SummaryStat("PRs", if (prCount > 0) "🏆 $prCount" else "0")
+                    }
                     if (w.notes.isNotBlank()) { Gap(4); Text(w.notes) }
                     if (w.endedAt == null) {
                         Gap(8)
@@ -190,7 +237,7 @@ fun WorkoutDetailScreen(workoutId: Long, nav: Nav) {
                 val bestHere = group.filter { it.kind != "W" }.maxByOrNull { setScore(type, it) }
                 SectionCard(ex?.name ?: "…", onClick = ex?.let { { nav.go(Screen.ExerciseDetail(it.id)) } }) {
                     group.sortedBy { it.setIndex }.forEachIndexed { i, s ->
-                        val isPr = s == bestHere && prBar >= 0 && setScore(type, s) > prBar
+                        val isPr = s == bestHere && prBar > 0 && setScore(type, s) > prBar
                         Row {
                             Text("${if (s.kind == "W") "W" else (i + 1).toString()}  ", fontWeight = FontWeight.Bold)
                             Text(describeSet(type, s), Modifier.weight(1f))
@@ -208,6 +255,14 @@ fun WorkoutDetailScreen(workoutId: Long, nav: Nav) {
                 nav.back()
             }
         }, onDismiss = { confirmDelete = false })
+    }
+}
+
+@Composable
+private fun SummaryStat(label: String, value: String) {
+    Column {
+        Text(value, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+        Muted(label)
     }
 }
 

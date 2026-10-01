@@ -63,6 +63,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -102,6 +103,15 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
         previous = exerciseIds.associateWith { Actions.previousSets(it, workoutId) }
     }
 
+    // Best score per exercise from earlier workouts, for live PR trophies.
+    var bestBefore by remember { mutableStateOf<Map<Long, Double>>(emptyMap()) }
+    LaunchedEffect(exerciseIds, allExercises.size) {
+        bestBefore = exerciseIds.associateWith { id ->
+            val type = allExercises[id]?.type ?: ExerciseType.WEIGHT_REPS
+            dao.history(id, workoutId).filter { it.set.kind != "W" }.maxOfOrNull { setScore(type, it.set) } ?: 0.0
+        }
+    }
+
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); delay(250) } }
 
@@ -118,7 +128,7 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
             TopAppBar(
                 title = {
                     Column {
-                        Text(w?.name ?: "Workout", style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                        Text(w?.name ?: "Workout", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         if (w != null) Muted(fmtClock((now - w.startedAt) / 1000))
                     }
                 },
@@ -153,6 +163,7 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
                         exercise = ex,
                         sets = groupSets.sortedBy { it.setIndex },
                         previous = previous[ex.id].orEmpty(),
+                        prBest = bestBefore[ex.id] ?: 0.0,
                         rest = rest,
                         now = now,
                         onAddSet = { scope.launch { Actions.addSet(workoutId, order) } },
@@ -261,6 +272,7 @@ private fun ExerciseBlock(
     exercise: Exercise,
     sets: List<WorkoutSet>,
     previous: List<WorkoutSet>,
+    prBest: Double,
     rest: RestTimer.State?,
     now: Long,
     onAddSet: () -> Unit,
@@ -326,7 +338,7 @@ private fun ExerciseBlock(
             if (s.kind != "W") workingIndex++
             val above = sets.getOrNull(i - 1)
             key(s.id) {
-                SetRow(exercise, s, label, prev, above)
+                SetRow(exercise, s, label, prev, above, prBest)
                 if (exercise.restSeconds > 0) {
                     RestDivider(exercise, s, rest, now, onActiveClick = onOpenTimer, onPlannedClick = onPickRest)
                 }
@@ -355,7 +367,7 @@ private fun fieldLabels(type: String) = when (type) {
 private fun targetPlaceholder(target: String): String = Regex("\\d+(\\.\\d+)?").find(target)?.value ?: ""
 
 @Composable
-private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: WorkoutSet?, above: WorkoutSet?) {
+private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: WorkoutSet?, above: WorkoutSet?, prBest: Double) {
     val dao = Graph.dao
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -429,13 +441,26 @@ private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: Wor
             second = secondOf(prev).orEmpty()
             save(weight, second)
         } else Modifier
-        Text(
-            prev?.let { describeSet(type, it) } ?: if (set.target.isNotEmpty()) "target ${set.target}" else "—",
-            Modifier.weight(1f).then(copyPrev).padding(horizontal = 4.dp, vertical = 10.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-        )
+        val isPr = done && set.kind != "W" && prBest > 0 && setScore(type, set) > prBest
+        if (isPr) {
+            Text(
+                "🏆 PR",
+                Modifier.weight(1f).padding(horizontal = 4.dp, vertical = 10.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.tertiary,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+        } else {
+            Text(
+                prev?.let { describeSet(type, it) } ?: if (set.target.isNotEmpty()) "target ${set.target}" else "—",
+                Modifier.weight(1f).then(copyPrev).padding(horizontal = 4.dp, vertical = 10.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         SetInput(weight, { weight = it; save(it, second) }, weightHint, KgCol, decimal = true, imeAction = ImeAction.Next, done = done)
         Spacer(Modifier.width(ColGap))
         SetInput(second, { second = it; save(weight, it) }, secondHint, SecondCol, decimal = type == ExerciseType.LOAD_DISTANCE, imeAction = ImeAction.Done, done = done)
