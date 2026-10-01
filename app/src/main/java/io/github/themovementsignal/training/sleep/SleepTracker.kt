@@ -22,6 +22,7 @@ import android.media.AudioRecord
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -42,6 +43,7 @@ import io.github.themovementsignal.training.Graph
 import io.github.themovementsignal.training.MainActivity
 import io.github.themovementsignal.training.R
 import io.github.themovementsignal.training.TrainingApp
+import io.github.themovementsignal.training.data.Settings
 import io.github.themovementsignal.training.data.Sleep
 import io.github.themovementsignal.training.data.SleepSample
 import io.github.themovementsignal.training.domain.SleepAnalysis
@@ -86,6 +88,27 @@ object SleepTracker {
             .putExtra("listen", listen)
         ContextCompat.startForegroundService(context, i)
     }
+
+    /** Changes (or turns off, with null) the alarm for a night that's already being tracked. */
+    fun setAlarm(context: Context, alarmAt: Long?, windowMin: Int) {
+        if (_state.value == null) return
+        try {
+            context.startService(
+                Intent(context, SleepTrackerService::class.java).setAction(SleepTrackerService.ACTION_SET_ALARM)
+                    .putExtra("alarmAt", alarmAt ?: -1L)
+                    .putExtra("windowMin", windowMin)
+            )
+        } catch (e: Exception) {
+            ErrorLog.log("SLEEP", "Could not reach the sleep tracker", e)
+        }
+    }
+
+    /** The alarm sound the user picked, or the phone's default alarm sound. */
+    fun alarmSound(context: Context, picked: String?): Uri? =
+        picked?.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
+            ?: RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_ALARM)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
     fun stop(context: Context) = send(context, SleepTrackerService.ACTION_STOP)
     fun snooze(context: Context) = send(context, SleepTrackerService.ACTION_SNOOZE)
@@ -136,6 +159,14 @@ class SleepTrackerService : Service() {
                 enterForeground(SleepTracker.state.value!!.listening)
             }
             ACTION_SNOOZE -> snooze()
+            ACTION_SET_ALARM -> SleepTracker.state.value?.let { live ->
+                val alarmAt = intent.getLongExtra("alarmAt", -1L).takeIf { it > 0 }
+                SleepTracker._state.value = live.copy(alarmAt = alarmAt, windowMin = intent.getIntExtra("windowMin", live.windowMin))
+                cancelBackupAlarm()
+                alarmAt?.let { scheduleBackupAlarm(it) }
+                Graph.scope.launch { Graph.dao.sleep(live.sleepId)?.let { Graph.dao.updateSleep(it.copy(alarmAt = alarmAt)) } }
+                updateNotification()
+            }
             ACTION_STOP -> finishNight()
             else -> if (SleepTracker.state.value == null) stopSelf()
         }
@@ -313,9 +344,8 @@ class SleepTrackerService : Service() {
         val live = SleepTracker.state.value ?: return
         SleepTracker._state.value = live.copy(ringing = true, snoozedUntil = null)
         try {
-            val uri = RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            val picked = runBlocking { Graph.dao.setting(Settings.ALARM_SOUND) }
+            val uri = SleepTracker.alarmSound(this, picked)
             player = MediaPlayer().apply {
                 setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
                 setDataSource(this@SleepTrackerService, uri)
@@ -493,6 +523,7 @@ class SleepTrackerService : Service() {
         const val ACTION_START = "sleep_start"
         const val ACTION_STOP = "sleep_stop"
         const val ACTION_SNOOZE = "sleep_snooze"
+        const val ACTION_SET_ALARM = "sleep_set_alarm"
         private const val NOTIF_TRACKING = 11
         private const val NOTIF_ALARM = 12
         private const val GOLD = 0xFFF5C542.toInt()

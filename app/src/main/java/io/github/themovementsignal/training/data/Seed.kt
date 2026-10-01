@@ -43,6 +43,12 @@ object Settings {
     const val ALARM_ON = "alarm_on"
     const val ALARM_WINDOW = "alarm_window"
     const val SNORE_ON = "snore_on"
+    const val ALARM_SOUND = "alarm_sound"
+    /** Epoch day the current training block (program) started; unset = first workout. */
+    const val PROGRAM_START = "program_start"
+    const val PROGRAM_REVIEW_WEEKS = "program_review_weeks"
+    /** Epoch day before which the review reminder stays hidden ("remind me next week"). */
+    const val PROGRAM_REVIEW_SNOOZE = "program_review_snooze"
 
     const val DEFAULT_PLATES = "25,20,15,10,5,2.5,1.25"
 }

@@ -2,7 +2,11 @@ package io.github.themovementsignal.training.ui
 
 import android.Manifest
 import android.app.NotificationManager
-import android.app.TimePickerDialog
+import android.app.Activity
+import android.content.Context
+import android.media.AudioAttributes
+import android.media.MediaPlayer
+import android.media.RingtoneManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -11,13 +15,18 @@ import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -25,6 +34,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -38,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -77,9 +88,19 @@ fun SleepScreen(nav: Nav) {
     val alarmOn = (dao.settingFlow(Settings.ALARM_ON).collectAsState(initial = null).value ?: "1") == "1"
     val window = dao.settingFlow(Settings.ALARM_WINDOW).collectAsState(initial = null).value?.toIntOrNull() ?: 30
     val snoreOn = (dao.settingFlow(Settings.SNORE_ON).collectAsState(initial = null).value ?: "1") == "1"
+    val alarmSound by dao.settingFlow(Settings.ALARM_SOUND).collectAsState(initial = null)
     var showManual by remember { mutableStateOf(false) }
+    var pickTime by remember { mutableStateOf(false) }
 
     fun put(key: String, value: String) = scope.launch { dao.putSetting(Setting(key, value)) }
+
+    if (pickTime) AlarmTimeDialog(alarmTime, onDismiss = { pickTime = false }) { hhmm ->
+        pickTime = false
+        put(Settings.ALARM_TIME, hhmm)
+        put(Settings.ALARM_ON, "1")
+        // Already tracking tonight? Move tonight's alarm too.
+        SleepTracker.setAlarm(context, nextAlarmMillis(hhmm), window)
+    }
 
     fun start(listen: Boolean) {
         SleepTracker.start(context, if (alarmOn) nextAlarmMillis(alarmTime) else null, window, listen)
@@ -90,7 +111,7 @@ fun SleepScreen(nav: Nav) {
     LogScaffold("Sleep", nav) {
         val l = live
         if (l != null) {
-            item { TrackingCard(l) }
+            item { TrackingCard(l, onChangeAlarm = { pickTime = true }) }
         } else {
             val rateId = justFinished
             val toRate = rateId?.let { id -> sleeps.firstOrNull { it.id == id && it.quality == null } }
@@ -109,17 +130,14 @@ fun SleepScreen(nav: Nav) {
             item {
                 SectionCard("Smart alarm") {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
+                        Column(Modifier.weight(1f).clickable { pickTime = true }.testTag("alarmTime")) {
                             Text(if (alarmOn) alarmTime else "Off", style = MaterialTheme.typography.displaySmall, color = if (alarmOn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                             if (alarmOn && window > 0) Muted("Wakes you in light sleep from ${runCatching { LocalTime.parse(alarmTime).minusMinutes(window.toLong()).toString() }.getOrDefault("")}")
                         }
                         Switch(checked = alarmOn, onCheckedChange = { put(Settings.ALARM_ON, if (it) "1" else "0") })
                     }
                     if (alarmOn) {
-                        TextButton(onClick = {
-                            val t = runCatching { LocalTime.parse(alarmTime) }.getOrDefault(LocalTime.of(6, 30))
-                            TimePickerDialog(context, { _, h, m -> put(Settings.ALARM_TIME, "%02d:%02d".format(h, m)) }, t.hour, t.minute, true).show()
-                        }) { Text("Change time") }
+                        TextButton(onClick = { pickTime = true }) { Text("Change time") }
                         Text("Wake-up window (minutes)")
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             listOf(0, 10, 20, 30, 45).forEach { w ->
@@ -129,6 +147,8 @@ fun SleepScreen(nav: Nav) {
                                 else OutlinedButton(onClick = { put(Settings.ALARM_WINDOW, w.toString()) }, Modifier.weight(1f), contentPadding = pad) { Text(label, maxLines = 1) }
                             }
                         }
+                        Gap(8)
+                        AlarmSoundRow(alarmSound) { put(Settings.ALARM_SOUND, it) }
                     }
                     Gap(8)
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -171,7 +191,7 @@ fun SleepScreen(nav: Nav) {
 }
 
 @Composable
-private fun TrackingCard(l: SleepTracker.Live) {
+private fun TrackingCard(l: SleepTracker.Live, onChangeAlarm: () -> Unit) {
     val context = LocalContext.current
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); delay(1000) } }
@@ -181,6 +201,7 @@ private fun TrackingCard(l: SleepTracker.Live) {
         Gap(8)
         StatLine("Alarm", l.alarmAt?.let { fmtTime(it) + if (l.windowMin > 0) " (window ${l.windowMin} min)" else "" } ?: "Off")
         l.snoozedUntil?.let { StatLine("Snoozed until", fmtTime(it)) }
+        if (!l.ringing) TextButton(onClick = onChangeAlarm) { Text(if (l.alarmAt == null) "Set an alarm" else "Change alarm time") }
         StatLine("Snore detection", when {
             !l.listening -> "Off"
             l.modelReady -> "On · ${l.snoreSec / 60} min so far"
@@ -345,5 +366,78 @@ private fun SnoreBars(snoreSec: List<Int>, noise: List<Float>) {
             prev?.let { drawLine(line.copy(alpha = 0.6f), it, p, 2f) }
             prev = p
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AlarmTimeDialog(current: String, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+    val t = runCatching { LocalTime.parse(current) }.getOrDefault(LocalTime.of(6, 30))
+    val state = rememberTimePickerState(initialHour = t.hour, initialMinute = t.minute, is24Hour = true)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Wake me at") },
+        text = { TimePicker(state = state) },
+        confirmButton = { TextButton(onClick = { onPick("%02d:%02d".format(state.hour, state.minute)) }) { Text("Set alarm") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+private fun soundTitle(context: Context, picked: String?): String {
+    if (picked.isNullOrBlank()) return "Phone's default alarm"
+    return runCatching { RingtoneManager.getRingtone(context, Uri.parse(picked))?.getTitle(context) }.getOrNull() ?: "Custom sound"
+}
+
+/** Pick the alarm sound from the phone's own alarm tones, and preview it at alarm volume. */
+@Composable
+private fun AlarmSoundRow(picked: String?, onPicked: (String) -> Unit) {
+    val context = LocalContext.current
+    var preview by remember { mutableStateOf<MediaPlayer?>(null) }
+    DisposableEffect(Unit) { onDispose { preview?.release() } }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        if (r.resultCode == Activity.RESULT_OK) {
+            @Suppress("DEPRECATION")
+            val uri = r.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            onPicked(uri?.toString() ?: "")
+        }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Alarm sound")
+            Muted(soundTitle(context, picked) + " · plays at alarm volume, getting louder")
+        }
+    }
+    Row {
+        TextButton(onClick = {
+            picker.launch(
+                Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
+                    .putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
+                    .putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Alarm sound")
+                    .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                    .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                    .putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, SleepTracker.alarmSound(context, picked))
+            )
+        }) { Text("Change sound") }
+        TextButton(onClick = {
+            preview?.release()
+            val uri = SleepTracker.alarmSound(context, picked)
+            preview = uri?.let {
+                runCatching {
+                    MediaPlayer().apply {
+                        setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+                        setDataSource(context, it)
+                        prepare()
+                        start()
+                    }
+                }.getOrNull()
+            }
+        }) { Text("Test sound") }
+        if (preview != null) TextButton(onClick = { preview?.release(); preview = null }) { Text("Stop") }
+    }
+    // Stop the preview by itself after 6 seconds.
+    LaunchedEffect(preview) {
+        val p = preview ?: return@LaunchedEffect
+        delay(6_000)
+        if (preview === p) { p.release(); preview = null }
     }
 }

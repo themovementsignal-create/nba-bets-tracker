@@ -15,20 +15,25 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.themovementsignal.training.Graph
 import io.github.themovementsignal.training.data.SessionType
+import io.github.themovementsignal.training.data.Setting
 import io.github.themovementsignal.training.data.Settings
 import io.github.themovementsignal.training.domain.Calc
+import io.github.themovementsignal.training.domain.ProgramReview
 import io.github.themovementsignal.training.sleep.SleepTracker
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.launch
 
 private data class Tile(val title: String, val status: String, val screen: Screen, val done: Boolean = false)
 
@@ -53,6 +58,10 @@ fun HomeScreen(nav: Nav) {
     val proteinMin = dao.settingFlow(Settings.PROTEIN_MIN).collectAsState(initial = "160").value?.toIntOrNull() ?: 160
     val monthTarget = dao.settingFlow(Settings.MONTHLY_SESSION_TARGET).collectAsState(initial = "7").value?.toIntOrNull() ?: 7
     val neatTarget = dao.settingFlow(Settings.NEAT_WEEKLY_SESSIONS).collectAsState(initial = "3").value?.toIntOrNull() ?: 3
+    val programStart = dao.settingFlow(Settings.PROGRAM_START).collectAsState(initial = null).value?.toLongOrNull()
+    val reviewWeeks = dao.settingFlow(Settings.PROGRAM_REVIEW_WEEKS).collectAsState(initial = null).value?.toIntOrNull()
+    val reviewSnooze = dao.settingFlow(Settings.PROGRAM_REVIEW_SNOOZE).collectAsState(initial = null).value?.toLongOrNull()
+    val scope = rememberCoroutineScope()
 
     val todayDate = LocalDate.now()
     val weekStart = Calc.mondayOf(todayDate).toEpochDay()
@@ -80,6 +89,9 @@ fun HomeScreen(nav: Nav) {
     val todaysCheckIn = checkIns.firstOrNull { it.day == today() }
     val recentNiggles = niggles.filter { it.at >= System.currentTimeMillis() - 14 * 86_400_000L && it.severity >= 3 }
         .distinctBy { it.region + it.side }
+    val review = ProgramReview.status(
+        programStart, workouts.lastOrNull()?.workout?.startedAt?.toLocalDate()?.toEpochDay(), today(), reviewWeeks, reviewSnooze,
+    )
     val gearNudges = gear.mapNotNull { g -> gearNudge(g)?.let { "${g.gear.name}: $it" } }
 
     val tiles = listOf(
@@ -122,6 +134,23 @@ fun HomeScreen(nav: Nav) {
                 }
             }
         }
+        if (review?.due == true) item {
+            SectionCard("Time to review your program") {
+                Text("Week ${review.weeksDone + 1} of this block", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                Muted("Running since ${fmtDay(review.startDay)}. After ${review.reviewWeeks} weeks it's worth a look: what's progressing, what's stalled, how you feel.")
+                Row {
+                    TextButton(onClick = {
+                        scope.launch {
+                            dao.putSetting(Setting(Settings.PROGRAM_START, today().toString()))
+                            dao.putSetting(Setting(Settings.PROGRAM_REVIEW_SNOOZE, ""))
+                        }
+                    }) { Text("Reviewed · start new block") }
+                    TextButton(onClick = {
+                        scope.launch { dao.putSetting(Setting(Settings.PROGRAM_REVIEW_SNOOZE, (today() + 7).toString())) }
+                    }) { Text("Next week") }
+                }
+            }
+        }
         tiles.chunked(2).forEach { pair ->
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -145,7 +174,7 @@ fun HomeScreen(nav: Nav) {
                 Text("$monthSessions / $monthTarget", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 LinearProgressIndicator(progress = { (monthSessions.toFloat() / monthTarget).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
                 Gap(4)
-                Muted("Strength workouts + basketball/conditioning")
+                Muted("Strength workouts + conditioning")
             }
         }
         item {

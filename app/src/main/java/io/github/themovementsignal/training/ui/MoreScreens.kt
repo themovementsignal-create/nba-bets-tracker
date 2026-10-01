@@ -50,6 +50,7 @@ import io.github.themovementsignal.training.data.Setting
 import io.github.themovementsignal.training.data.Settings
 import io.github.themovementsignal.training.data.Venue
 import io.github.themovementsignal.training.domain.Calc
+import io.github.themovementsignal.training.domain.ProgramReview
 import io.github.themovementsignal.training.io.DataIO
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -192,7 +193,32 @@ fun SettingsScreen(nav: Nav) {
         item { SettingField("Training sessions per month target", Settings.MONTHLY_SESSION_TARGET, "7") }
         item { SettingField("NEAT sessions per week (minimum)", Settings.NEAT_WEEKLY_SESSIONS, "3") }
         item { SettingField("NEAT session length (min)", Settings.NEAT_SESSION_MIN, "60") }
+        item { SettingField("Review program every (weeks)", Settings.PROGRAM_REVIEW_WEEKS, ProgramReview.DEFAULT_WEEKS.toString()) }
+        item { ProgramBlockRow() }
         item { Muted("Units are fixed: kg, km/m, °C.") }
+    }
+}
+
+/** Shows how long the current training block has been running, and lets you restart the count. */
+@Composable
+private fun ProgramBlockRow() {
+    val dao = Graph.dao
+    val scope = rememberCoroutineScope()
+    val start = dao.settingFlow(Settings.PROGRAM_START).collectAsState(initial = null).value?.toLongOrNull()
+    val weeks = dao.settingFlow(Settings.PROGRAM_REVIEW_WEEKS).collectAsState(initial = null).value?.toIntOrNull()
+    val workouts by dao.workoutSummaries().collectAsState(initial = emptyList())
+    val status = ProgramReview.status(start, workouts.lastOrNull()?.workout?.startedAt?.toLocalDate()?.toEpochDay(), today(), weeks, null)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Current block")
+            Muted(status?.let { "Since ${fmtDay(it.startDay)} · week ${it.weeksDone + 1} of ${it.reviewWeeks}" } ?: "Starts with your first workout")
+        }
+        TextButton(onClick = {
+            scope.launch {
+                dao.putSetting(Setting(Settings.PROGRAM_START, today().toString()))
+                dao.putSetting(Setting(Settings.PROGRAM_REVIEW_SNOOZE, ""))
+            }
+        }) { Text("Start new block") }
     }
 }
 

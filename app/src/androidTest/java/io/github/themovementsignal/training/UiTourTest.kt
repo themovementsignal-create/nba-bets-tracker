@@ -207,8 +207,15 @@ class UiTourTest {
             tap("Save") // returns to More; the back() after this goes to the Today tab, which is fine.
         }
         openFromMore("Sleep", "sleep") {
+            // Tapping the big alarm time opens the in-app time picker.
+            compose.onNodeWithTag("alarmTime").performClick()
+            waitFor("Wake me at")
+            shot("sleep-alarm-time-picker")
+            tapInDialog("Set alarm")
+            waitFor("Alarm sound")
             tap("🌙 Start sleep tracking")
             waitFor("Tracking your sleep 🌙")
+            waitFor("Change alarm time")
             // Let the tracker record a couple of minutes (movement, loudness, snore model).
             Thread.sleep(125_000)
             compose.waitForIdle()

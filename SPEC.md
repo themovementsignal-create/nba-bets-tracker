@@ -43,5 +43,6 @@ Kotlin, Jetpack Compose, Material 3, Room (SQLite), Health Connect (Phase 3). Mi
 - [x] Travel mode: hotel-gym versions of my sessions
 
 ## Phase 4: Claude
+- [ ] Program review reminder: after a set number of weeks on a block (default 6), prompt a review
 - [ ] Weekly review summary
 - [ ] Chat that proposes program changes as a diff I approve (in-app API vs MCP connector: decide later)
