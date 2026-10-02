@@ -227,6 +227,7 @@ class UiTourTest {
             waitFor("Sleep stages (estimated)")
             shot("sleep-night-detail")
             back()
+            waitFor("Good morning — how did you sleep?")
             compose.onAllNodesWithText("4")[0].performClick()
             compose.waitForIdle()
             shot("sleep-rated")
