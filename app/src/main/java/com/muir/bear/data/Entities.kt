@@ -327,3 +327,16 @@ data class Setting(
     @PrimaryKey val key: String,
     val value: String,
 )
+
+/** A morning HRV measurement with the phone camera (v4). */
+@Entity(tableName = "hrv_reading", indices = [Index("at")])
+data class HrvReading(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val at: Long,
+    /** RMSSD in milliseconds. */
+    val rmssdMs: Double,
+    val heartRate: Double,
+    /** Share of beat intervals rejected as unclear, 0–100. */
+    val artifactPct: Double,
+    val seconds: Int,
+)

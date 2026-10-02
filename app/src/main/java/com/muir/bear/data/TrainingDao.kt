@@ -480,4 +480,18 @@ interface TrainingDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun restoreVenues(x: List<Venue>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun restoreJumpTests(x: List<JumpTest>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun restoreSettings(x: List<Setting>)
+
+    // ---------- HRV ----------
+
+    @Insert
+    suspend fun insertHrv(r: HrvReading): Long
+
+    @Query("SELECT * FROM hrv_reading ORDER BY at DESC")
+    fun hrvReadings(): Flow<List<HrvReading>>
+
+    @Query("SELECT * FROM hrv_reading ORDER BY at DESC")
+    suspend fun allHrv(): List<HrvReading>
+
+    @Query("DELETE FROM hrv_reading WHERE id = :id")
+    suspend fun deleteHrv(id: Long)
 }

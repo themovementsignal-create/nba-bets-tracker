@@ -56,6 +56,8 @@ sealed interface Screen {
     data object Errors : Screen
     data object About : Screen
     data object Insights : Screen
+    data object Hrv : Screen
+    data object Weekly : Screen
     data object JumpTest : Screen
 }
 
@@ -179,6 +181,8 @@ private fun ScreenContent(s: Screen, nav: Nav) {
         Screen.Errors -> ErrorLogScreen(nav)
         Screen.About -> AboutScreen(nav)
         Screen.Insights -> InsightsScreen(nav)
+        Screen.Hrv -> HrvScreen(nav)
+        Screen.Weekly -> WeeklySummaryScreen(nav)
         Screen.JumpTest -> JumpTestScreen(nav)
     }
 }

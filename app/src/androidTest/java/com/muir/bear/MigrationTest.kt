@@ -107,4 +107,21 @@ class MigrationTest {
             assertEquals("Rower", dao.allActivities().single().kind)
         }
     }
+
+    @Test
+    fun upgradeFromV3KeepsData() {
+        val name = "migration-test-v3.db"
+        createOld(name, 3) { db ->
+            db.execSQL("INSERT INTO exercise (id, name, type, equipment, barId, restSeconds, notes, isCustom, archived, muscles, secondaryMuscles) VALUES (1, 'Chin-Up', 'BODYWEIGHT', '', NULL, 120, '', 0, 0, 'lats,biceps', 'forearms')")
+            db.execSQL("INSERT INTO workout (id, name, startedAt, endedAt, rpe, notes, source) VALUES (1, 'Session 2', 1000, 5000, 7, '', '')")
+            db.execSQL("INSERT INTO workout_set (id, workoutId, exerciseId, exerciseOrder, setIndex, weightKg, reps, completed, completedAt, kind, target, rpe) VALUES (1, 1, 1, 0, 0, 10.0, 6, 1, 2000, '', '6', 8.5)")
+        }
+        openCurrent(name) { db ->
+            val dao = db.dao()
+            val e = dao.allExercises().single()
+            assertEquals("lats,biceps", e.muscles)
+            assertEquals(8.5, dao.allSets().single().rpe!!, 0.0)
+            assertEquals(0, dao.allHrv().size)
+        }
+    }
 }

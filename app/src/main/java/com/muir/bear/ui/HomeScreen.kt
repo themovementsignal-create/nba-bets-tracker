@@ -92,6 +92,7 @@ fun HomeScreen(nav: Nav) {
         programStart, workouts.lastOrNull()?.workout?.startedAt?.toLocalDate()?.toEpochDay(), today(), reviewWeeks, reviewSnooze,
     )
     // Readiness: plain call + reasons, from sleep, check-in, load and niggles.
+    val hrv by dao.hrvReadings().collectAsState(initial = emptyList())
     val sleepNeed = Calc.parseNumber(dao.settingFlow(Settings.SLEEP_NEED).collectAsState(initial = null).value) ?: 8.0
     val readiness = run {
         val nights = sleeps.filter { it.wakeAt != null }.sortedByDescending { it.wakeAt }
@@ -105,6 +106,8 @@ fun HomeScreen(nav: Nav) {
                 energy = todaysCheckIn?.energy,
                 soreness = todaysCheckIn?.soreness,
                 formRatio = form?.takeIf { it.fitness >= 1.0 }?.let { it.form / it.fitness },
+                hrvToday = hrv.firstOrNull()?.takeIf { it.at.toLocalDate() == todayDate }?.rmssdMs,
+                hrvBaseline = hrv.drop(1).filter { it.at >= System.currentTimeMillis() - 30 * 86_400_000L }.map { it.rmssdMs },
                 niggles = niggles.filter { it.at >= System.currentTimeMillis() - 7 * 86_400_000L }
                     .sortedByDescending { it.at }.distinctBy { it.region + it.side }
                     .map { (if (it.side == "Centre") "" else it.side + " ").lowercase().replaceFirstChar { c -> c.uppercase() } + it.region.lowercase() to it.severity },
@@ -166,6 +169,9 @@ fun HomeScreen(nav: Nav) {
                             color = if (s.level == Readiness.Level.POOR) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                }
+                if (hrv.firstOrNull()?.at?.toLocalDate() != todayDate) {
+                    TextButton(onClick = { nav.go(Screen.Hrv) }) { Text("Measure morning HRV ›") }
                 }
             }
         }

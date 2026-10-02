@@ -62,12 +62,12 @@ import java.time.LocalDate
 fun MoreScreen(nav: Nav) {
     LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { Text("More", style = MaterialTheme.typography.headlineMedium) }
-        item { MenuGroup("Training", listOf("Insights" to Screen.Insights, "Exercise library" to Screen.Exercises, "Plate calculator & bars" to Screen.PlateCalc, "Gyms & travel mode" to Screen.Venues, "Jump height test" to Screen.JumpTest), nav) }
+        item { MenuGroup("Training", listOf("Insights" to Screen.Insights, "Weekly summary" to Screen.Weekly, "Exercise library" to Screen.Exercises, "Plate calculator & bars" to Screen.PlateCalc, "Gyms & travel mode" to Screen.Venues, "Jump height test" to Screen.JumpTest), nav) }
         item {
             MenuGroup(
                 "Logs",
                 listOf(
-                    "Morning check-in" to Screen.CheckIn, "Sleep" to Screen.Sleep, "Bodyweight" to Screen.Bodyweight,
+                    "Morning check-in" to Screen.CheckIn, "Morning HRV" to Screen.Hrv, "Sleep" to Screen.Sleep, "Bodyweight" to Screen.Bodyweight,
                     "Protein" to Screen.Protein, "Supplements" to Screen.Supplements, "Sauna" to Screen.Sauna,
                     "NEAT · treadmill" to Screen.Neat, "Conditioning" to Screen.Activity,
                     "Niggles" to Screen.Niggle, "Gear" to Screen.Gear,

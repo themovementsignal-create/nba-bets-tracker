@@ -237,6 +237,7 @@ class UiTourTest {
             compose.waitForIdle()
             shot("sleep-rated")
         }
+        openFromMore("Morning HRV", "hrv")
         openFromMore("Bodyweight", "bodyweight") {
             compose.onAllNodes(hasSetTextAction())[0].performTextInput("99.2")
             tap("Save")
@@ -277,6 +278,11 @@ class UiTourTest {
             waitFor("Hard sets per muscle")
             scrollTo("Strength trends")
             shot("insights-bottom")
+        }
+        openFromMore("Weekly summary", "weekly") {
+            waitFor("Body and habits")
+            scrollTo("Copy as text")
+            shot("weekly-bottom")
         }
         openFromMore("Niggles", "niggles")
         openFromMore("Gear", "gear")
