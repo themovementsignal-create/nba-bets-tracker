@@ -79,12 +79,12 @@ fun WeeklySummaryScreen(nav: Nav) {
         val load = loads.filter { inWeek(it.first) }.sumOf { it.second }
         val prevLoad = loads.filter { inPrev(it.first) }.sumOf { it.second }
         val minutes = sw.sumOf { ((it.endedAt!! - it.startedAt) / 60_000).toInt() } + cw.sumOf { it.durationMin }
-        val form = Insights.fitnessFatigue(loads, to).lastOrNull()
+        val loadDays = Insights.fitnessFatigue(loads, to)
         add(Section("Training", buildList {
             add("${sw.size} strength ${if (sw.size == 1) "session" else "sessions"}, ${cw.size} conditioning, $minutes min in all.")
             if (prevLoad > 0) add("Load ${load.roundToInt()} (${"%+d".format(((load - prevLoad) / prevLoad * 100).roundToInt())}% vs the week before).")
             else if (load > 0) add("Load ${load.roundToInt()}.")
-            form?.let { add("By the end of the week: ${Insights.formLabel(it).lowercase()}.") }
+            if (Insights.formRatio(loadDays) != null) add("By the end of the week: ${Insights.formLabel(loadDays).lowercase()}.")
         }))
 
         // Strength: best e1RM this week vs everything before it
@@ -124,7 +124,7 @@ fun WeeklySummaryScreen(nav: Nav) {
         val hrvWeek = hrv.filter { inWeek(it.at.toLocalDate().toEpochDay()) }
         val hrvPrev = hrv.filter { inPrev(it.at.toLocalDate().toEpochDay()) }
         add(Section("Recovery", buildList {
-            if (st != null) add("Sleep: %.1f h a night over %d nights, %.1f h short of your %s h need.".format(st.avgHours, st.nights, st.debtHours, Calc.fmt(sleepNeed)))
+            if (st != null) add("Sleep: %.1f h a night over %d %s, %.1f h short of your %s h need.".format(st.avgHours, st.nights, if (st.nights == 1) "night" else "nights", st.debtHours, Calc.fmt(sleepNeed)))
             else add("No sleep logged.")
             if (hrvWeek.isNotEmpty()) {
                 val avg = hrvWeek.map { it.rmssdMs }.average()
@@ -150,7 +150,7 @@ fun WeeklySummaryScreen(nav: Nav) {
             val sauna = saunas.filter { inWeek(it.at.toLocalDate().toEpochDay()) }
             if (sauna.isNotEmpty()) add("Sauna ${sauna.size}×, ${sauna.sumOf { it.rounds * it.minutesPerRound }} min.")
             val neat = activities.filter { it.type == SessionType.NEAT && inWeek(it.startedAt.toLocalDate().toEpochDay()) }
-            if (neat.isNotEmpty()) add("NEAT ${neat.size} sessions, ${neat.sumOf { it.durationMin }} min.")
+            if (neat.isNotEmpty()) add("NEAT ${neat.size} ${if (neat.size == 1) "session" else "sessions"}, ${neat.sumOf { it.durationMin }} min.")
         }))
     }
 

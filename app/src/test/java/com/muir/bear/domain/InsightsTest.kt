@@ -28,7 +28,11 @@ class InsightsTest {
         assertTrue(rested.fatigue < last.fatigue / 2)
         assertTrue(rested.fitness > last.fitness * 0.8)
         assertTrue(rested.form > 0)
-        assertEquals("Fresh: fatigue has cleared", Insights.formLabel(rested))
+        assertEquals("Fresh: fatigue has cleared", Insights.formLabel(Insights.fitnessFatigue(loads, 34)))
+        // One session isn't enough history for a reading.
+        val one = Insights.fitnessFatigue(listOf(0L to 300.0), 0)
+        assertEquals("Building a baseline: about 13 more days", Insights.formLabel(one))
+        assertEquals(null, Insights.formRatio(one))
     }
 
     @Test fun sleepDebtAndSpread() {
@@ -43,6 +47,8 @@ class InsightsTest {
         assertEquals(7.0, s.debtHours, 1e-9)
         assertTrue(s.bedSpreadMin!! in 25.0..35.0) // alternating by an hour, not 23 hours
         assertNull(Insights.sleepStats(emptyList(), 8.0))
+        // A 2-minute test "night" is ignored.
+        assertNull(Insights.sleepStats(listOf(Insights.Night(0, 120_000)), 8.0))
     }
 
     @Test fun plateauNeedsEvidence() {

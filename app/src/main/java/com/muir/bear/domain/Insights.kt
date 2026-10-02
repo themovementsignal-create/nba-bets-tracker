@@ -59,9 +59,23 @@ object Insights {
         return out
     }
 
+    /** Days of history the model needs before its reading means much. */
+    const val BASELINE_DAYS = 14
+
+    /** Form relative to fitness, or null until there's enough history. */
+    fun formRatio(days: List<LoadDay>): Double? {
+        val day = days.lastOrNull() ?: return null
+        if (days.size < BASELINE_DAYS || day.fitness < 1.0) return null
+        return day.form / day.fitness
+    }
+
     /** Plain-language reading of form relative to fitness (thresholds as ratios, so they scale). */
-    fun formLabel(day: LoadDay): String {
-        if (day.fitness < 1.0) return "Building a baseline"
+    fun formLabel(days: List<LoadDay>): String {
+        val day = days.lastOrNull() ?: return "No training load logged yet"
+        if (days.size < BASELINE_DAYS || day.fitness < 1.0) {
+            val left = BASELINE_DAYS - days.size
+            return if (left > 0) "Building a baseline: about $left more ${if (left == 1) "day" else "days"}" else "Building a baseline"
+        }
         val r = day.form / day.fitness
         return when {
             r < -0.3 -> "Heavy fatigue: a lighter few days would help"
@@ -79,7 +93,8 @@ object Insights {
 
     /** [nights] newest first or any order; uses the last [days] nights. Times are epoch millis; [zoneOffsetMin] for clock times. */
     fun sleepStats(nights: List<Night>, needHours: Double, days: Int = 7, zoneOffsetMin: Int = 0): SleepStats? {
-        val recent = nights.filter { it.wakeAt > it.bedAt }.sortedByDescending { it.wakeAt }.take(days)
+        // Nights under an hour are naps, tests or mistakes, not sleep.
+        val recent = nights.filter { it.wakeAt - it.bedAt >= 3_600_000L }.sortedByDescending { it.wakeAt }.take(days)
         if (recent.isEmpty()) return null
         val hours = recent.map { (it.wakeAt - it.bedAt) / 3_600_000.0 }
         val debt = hours.sumOf { (needHours - it).coerceAtLeast(0.0) }

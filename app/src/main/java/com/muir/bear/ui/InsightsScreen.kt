@@ -74,7 +74,7 @@ fun InsightsScreen(nav: Nav) {
                 if (last == null) {
                     Muted("Finish a workout with a session RPE to start this.")
                 } else {
-                    Text(Insights.formLabel(last), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    Text(Insights.formLabel(days), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                     Gap(4)
                     val shown = days.filter { it.day > today - 56 }
                     LineChart(
@@ -150,7 +150,7 @@ fun InsightsScreen(nav: Nav) {
                 if (s7 == null) {
                     Muted("Track or log a few nights to see this.")
                 } else {
-                    StatLine("Average, last ${s7.nights} nights", "%.1f h".format(s7.avgHours))
+                    StatLine("Average, last ${s7.nights} ${if (s7.nights == 1) "night" else "nights"}", "%.1f h".format(s7.avgHours))
                     StatLine("Sleep debt (need ${Calc.fmt(sleepNeed)} h)", "%.1f h".format(s7.debtHours),
                         if (s7.debtHours >= 5) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified)
                     s14?.bedSpreadMin?.let { StatLine("Bedtime varies by", "± ${it.roundToInt()} min") }

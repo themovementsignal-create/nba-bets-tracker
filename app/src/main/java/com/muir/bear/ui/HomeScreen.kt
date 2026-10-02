@@ -78,7 +78,7 @@ fun HomeScreen(nav: Nav) {
     // Weekly load = session RPE × minutes
     val loadItems = trainingLoads(finished, activities)
     val weeks = Calc.weekly(loadItems, todayDate, weeks = 8)
-    val form = Insights.fitnessFatigue(loadItems, today()).lastOrNull()
+    val loadDays = Insights.fitnessFatigue(loadItems, today())
 
     val todayProtein = proteins.filter { it.day == today() }.sumOf { it.grams }
     val proteinHitDays = (0L..6L).count { off -> proteins.filter { it.day == today() - off }.sumOf { it.grams } >= proteinMin }
@@ -95,7 +95,8 @@ fun HomeScreen(nav: Nav) {
     val hrv by dao.hrvReadings().collectAsState(initial = emptyList())
     val sleepNeed = Calc.parseNumber(dao.settingFlow(Settings.SLEEP_NEED).collectAsState(initial = null).value) ?: 8.0
     val readiness = run {
-        val nights = sleeps.filter { it.wakeAt != null }.sortedByDescending { it.wakeAt }
+        // Ignore "nights" under an hour (naps, tests, mistakes).
+        val nights = sleeps.filter { it.wakeAt != null && it.wakeAt - it.bedAt >= 3_600_000L }.sortedByDescending { it.wakeAt }
         val hours = nights.map { (it.wakeAt!! - it.bedAt) / 3_600_000.0 }
         val lastNight = nights.firstOrNull()?.takeIf { it.wakeAt!!.toLocalDate() == todayDate }
         Readiness.assess(
@@ -105,7 +106,7 @@ fun HomeScreen(nav: Nav) {
                 debtHours = Insights.sleepStats(nights.map { Insights.Night(it.bedAt, it.wakeAt!!) }, sleepNeed)?.debtHours,
                 energy = todaysCheckIn?.energy,
                 soreness = todaysCheckIn?.soreness,
-                formRatio = form?.takeIf { it.fitness >= 1.0 }?.let { it.form / it.fitness },
+                formRatio = Insights.formRatio(loadDays),
                 hrvToday = hrv.firstOrNull()?.takeIf { it.at.toLocalDate() == todayDate }?.rmssdMs,
                 hrvBaseline = hrv.drop(1).filter { it.at >= System.currentTimeMillis() - 30 * 86_400_000L }.map { it.rmssdMs },
                 niggles = niggles.filter { it.at >= System.currentTimeMillis() - 7 * 86_400_000L }
@@ -227,7 +228,7 @@ fun HomeScreen(nav: Nav) {
                 )
                 Gap(4)
                 weeks.lastOrNull()?.let { Muted("This week: ${it.value.toInt()}") }
-                form?.let { Text(Insights.formLabel(it), color = MaterialTheme.colorScheme.primary) }
+                if (loadDays.isNotEmpty()) Text(Insights.formLabel(loadDays), color = MaterialTheme.colorScheme.primary)
                 Muted("Sessions without an RPE aren't counted. Tap for fitness, fatigue and more in Insights.")
             }
         }

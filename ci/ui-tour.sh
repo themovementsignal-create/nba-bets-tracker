@@ -7,6 +7,10 @@ PKG=com.muir.bear
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 adb logcat -c || true
+# The emulator's own launcher sometimes stalls on CI runners; hide "isn't responding" pop-ups so
+# they don't cover screenshots or steal input from the tour.
+adb shell settings put global hide_error_dialogs 1 || true
+adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
 
 adb shell am instrument -w -r \
   -e class "$PKG.MigrationTest,$PKG.UiTourTest" \
