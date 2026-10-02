@@ -55,15 +55,15 @@ Kotlin, Jetpack Compose, Material 3, Room (SQLite), Health Connect (Phase 3). Mi
 
 ## Phase 3b: Analytics without wearables
 Methods from published exercise science, built into the app (no copied code). Honest about uncertainty; no streaks or scores for their own sake.
-- [ ] Muscles worked per exercise (free-exercise-db vocabulary, public domain) and an optional RPE per set
-- [ ] RPE-adjusted estimated 1RM (RTS / Tuchscherer table) and a suggested load for a target RPE
-- [ ] Hard sets per muscle per week
-- [ ] Fitness and fatigue (Banister model) from session RPE × minutes, as the main training-load view
-- [ ] Sleep debt and regularity
-- [ ] Strength trends with gentle plateau flags
-- [ ] Daily readiness on Today, built from sleep vs your baseline, check-in, fatigue and niggles (and HRV when available), always showing its reasons
-- [ ] Morning HRV and resting heart rate with the phone camera (fingertip, about 2 min, quality-checked)
-- [ ] Weekly summary
+- [x] Muscles worked per exercise (free-exercise-db vocabulary, public domain) and an optional RPE per set
+- [x] RPE-adjusted estimated 1RM (RTS / Tuchscherer table) and a suggested load for a target RPE
+- [x] Hard sets per muscle per week
+- [x] Fitness and fatigue (Banister model) from session RPE × minutes, as the main training-load view
+- [x] Sleep debt and regularity
+- [x] Strength trends with gentle plateau flags
+- [x] Daily readiness on Today, built from sleep vs your baseline, check-in, fatigue and niggles (and HRV when available), always showing its reasons
+- [ ] Morning HRV and resting heart rate with the phone camera (fingertip, about 2 min, quality-checked) — built; confirm on a real phone
+- [x] Weekly summary
 
 ## Phase 4: Claude
 - [ ] Program review reminder: after a set number of weeks on a block (default 6), prompt a review
