@@ -44,6 +44,8 @@ object Settings {
     const val ALARM_WINDOW = "alarm_window"
     const val SNORE_ON = "snore_on"
     const val ALARM_SOUND = "alarm_sound"
+    /** Hours of sleep you need, for sleep debt. */
+    const val SLEEP_NEED = "sleep_need"
     /** Epoch day the current training block (program) started; unset = first workout. */
     const val PROGRAM_START = "program_start"
     const val PROGRAM_REVIEW_WEEKS = "program_review_weeks"

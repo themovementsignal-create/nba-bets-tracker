@@ -62,7 +62,7 @@ import java.time.LocalDate
 fun MoreScreen(nav: Nav) {
     LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { Text("More", style = MaterialTheme.typography.headlineMedium) }
-        item { MenuGroup("Training", listOf("Exercise library" to Screen.Exercises, "Plate calculator & bars" to Screen.PlateCalc, "Gyms & travel mode" to Screen.Venues, "Jump height test" to Screen.JumpTest), nav) }
+        item { MenuGroup("Training", listOf("Insights" to Screen.Insights, "Exercise library" to Screen.Exercises, "Plate calculator & bars" to Screen.PlateCalc, "Gyms & travel mode" to Screen.Venues, "Jump height test" to Screen.JumpTest), nav) }
         item {
             MenuGroup(
                 "Logs",
@@ -214,6 +214,7 @@ fun SettingsScreen(nav: Nav) {
         item { SettingField("Training sessions per month target", Settings.MONTHLY_SESSION_TARGET, "7") }
         item { SettingField("NEAT sessions per week (minimum)", Settings.NEAT_WEEKLY_SESSIONS, "3") }
         item { SettingField("NEAT session length (min)", Settings.NEAT_SESSION_MIN, "60") }
+        item { SettingField("Sleep need (hours a night)", Settings.SLEEP_NEED, "8") }
         item { SettingField("Review program every (weeks)", Settings.PROGRAM_REVIEW_WEEKS, ProgramReview.DEFAULT_WEEKS.toString()) }
         item { ProgramBlockRow() }
         item { Muted("Units are fixed: kg, km/m, °C.") }

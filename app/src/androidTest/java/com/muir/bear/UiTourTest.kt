@@ -273,6 +273,11 @@ class UiTourTest {
             waitFor("Saved ✓")
             shot("activity-saved")
         }
+        openFromMore("Insights", "insights") {
+            waitFor("Hard sets per muscle")
+            scrollTo("Strength trends")
+            shot("insights-bottom")
+        }
         openFromMore("Niggles", "niggles")
         openFromMore("Gear", "gear")
         openFromMore("Plate calculator & bars", "plates")
