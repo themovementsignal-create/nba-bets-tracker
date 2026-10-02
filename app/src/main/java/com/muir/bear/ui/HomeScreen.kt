@@ -29,6 +29,8 @@ import com.muir.bear.data.SessionType
 import com.muir.bear.data.Setting
 import com.muir.bear.data.Settings
 import com.muir.bear.domain.Calc
+import com.muir.bear.domain.Insights
+import com.muir.bear.domain.Readiness
 import com.muir.bear.domain.ProgramReview
 import com.muir.bear.sleep.SleepTracker
 import java.time.LocalDate
@@ -74,12 +76,9 @@ fun HomeScreen(nav: Nav) {
         sport.count { it.startedAt.toLocalDate().let { d -> d.year == todayDate.year && d.month == todayDate.month } }
 
     // Weekly load = session RPE × minutes
-    val loadItems = finished.mapNotNull { w ->
-        val rpe = w.rpe ?: return@mapNotNull null
-        val min = ((w.endedAt ?: w.startedAt) - w.startedAt) / 60_000.0
-        w.startedAt.toLocalDate().toEpochDay() to rpe * min
-    } + sport.mapNotNull { a -> a.rpe?.let { a.startedAt.toLocalDate().toEpochDay() to (it * a.durationMin).toDouble() } }
+    val loadItems = trainingLoads(finished, activities)
     val weeks = Calc.weekly(loadItems, todayDate, weeks = 8)
+    val form = Insights.fitnessFatigue(loadItems, today()).lastOrNull()
 
     val todayProtein = proteins.filter { it.day == today() }.sumOf { it.grams }
     val proteinHitDays = (0L..6L).count { off -> proteins.filter { it.day == today() - off }.sumOf { it.grams } >= proteinMin }
@@ -92,6 +91,26 @@ fun HomeScreen(nav: Nav) {
     val review = ProgramReview.status(
         programStart, workouts.lastOrNull()?.workout?.startedAt?.toLocalDate()?.toEpochDay(), today(), reviewWeeks, reviewSnooze,
     )
+    // Readiness: plain call + reasons, from sleep, check-in, load and niggles.
+    val sleepNeed = Calc.parseNumber(dao.settingFlow(Settings.SLEEP_NEED).collectAsState(initial = null).value) ?: 8.0
+    val readiness = run {
+        val nights = sleeps.filter { it.wakeAt != null }.sortedByDescending { it.wakeAt }
+        val hours = nights.map { (it.wakeAt!! - it.bedAt) / 3_600_000.0 }
+        val lastNight = nights.firstOrNull()?.takeIf { it.wakeAt!!.toLocalDate() == todayDate }
+        Readiness.assess(
+            Readiness.Inputs(
+                lastNightHours = lastNight?.let { hours.first() },
+                typicalHours = Readiness.median(hours.drop(1).take(14)).takeIf { hours.size >= 4 },
+                debtHours = Insights.sleepStats(nights.map { Insights.Night(it.bedAt, it.wakeAt!!) }, sleepNeed)?.debtHours,
+                energy = todaysCheckIn?.energy,
+                soreness = todaysCheckIn?.soreness,
+                formRatio = form?.takeIf { it.fitness >= 1.0 }?.let { it.form / it.fitness },
+                niggles = niggles.filter { it.at >= System.currentTimeMillis() - 7 * 86_400_000L }
+                    .sortedByDescending { it.at }.distinctBy { it.region + it.side }
+                    .map { (if (it.side == "Centre") "" else it.side + " ").lowercase().replaceFirstChar { c -> c.uppercase() } + it.region.lowercase() to it.severity },
+            ),
+        )
+    }
     val gearNudges = gear.mapNotNull { g -> gearNudge(g)?.let { "${g.gear.name}: $it" } }
 
     val tiles = listOf(
@@ -129,6 +148,24 @@ fun HomeScreen(nav: Nav) {
                 SectionCard("Workout in progress", onClick = { nav.go(Screen.Workout(w.id)) }) {
                     Text(w.name, style = MaterialTheme.typography.titleLarge)
                     Muted("Started ${fmtTime(w.startedAt)} · tap to resume")
+                }
+            }
+        }
+        item {
+            SectionCard("Readiness", onClick = { nav.go(if (todaysCheckIn == null) Screen.CheckIn else Screen.Insights) }) {
+                val r = readiness
+                if (r == null) {
+                    Muted("Do your morning check-in (and track or log last night's sleep) to see how ready you are today.")
+                } else {
+                    Text(r.call, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+                    Gap(4)
+                    r.signals.take(4).forEach { s ->
+                        Text(
+                            "· ${s.reason}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (s.level == Readiness.Level.POOR) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }
@@ -176,19 +213,16 @@ fun HomeScreen(nav: Nav) {
             }
         }
         item {
-            SectionCard("Weekly load (RPE × minutes)") {
+            SectionCard("Weekly load (RPE × minutes)", onClick = { nav.go(Screen.Insights) }) {
                 BarChart(
                     weeks.map { it.value.toFloat() },
                     weeks.map { it.start.format(DateTimeFormatter.ofPattern("d/M")) },
-                    weeks.map { it.spike },
+                    weeks.map { false },
                 )
-                val last = weeks.lastOrNull()
-                if (last != null) {
-                    Gap(4)
-                    Muted("This week: ${last.value.toInt()}" + (last.ratio?.let { " · %.2f× your 4-week average".format(it) } ?: ""))
-                    if (last.spike) Text("⚠ Load spike: more than 1.3× your recent average", color = MaterialTheme.colorScheme.error)
-                }
-                Muted("Red bars = spike weeks. Sessions without an RPE aren't counted.")
+                Gap(4)
+                weeks.lastOrNull()?.let { Muted("This week: ${it.value.toInt()}") }
+                form?.let { Text(Insights.formLabel(it), color = MaterialTheme.colorScheme.primary) }
+                Muted("Sessions without an RPE aren't counted. Tap for fitness, fatigue and more in Insights.")
             }
         }
         item {
