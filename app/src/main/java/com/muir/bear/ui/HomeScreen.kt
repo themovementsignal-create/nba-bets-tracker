@@ -117,12 +117,9 @@ fun HomeScreen(nav: Nav) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Column {
-                Text(
-                    "BEAR",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    letterSpacing = 6.sp,
-                )
+                BearWordmark(fontSize = 40.sp)
+                BearMotto(fontSize = 17.sp)
+                Gap(10)
                 Text(todayDate.format(DateTimeFormatter.ofPattern("EEEE d MMMM")), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

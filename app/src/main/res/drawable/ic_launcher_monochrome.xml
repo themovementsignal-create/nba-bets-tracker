@@ -4,8 +4,14 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Same stone in one colour; Android tints it for themed icons. -->
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M27.6,56.1 C28.1,46.8 38.6,41.3 52.4,41.3 C67.2,41.3 80.4,46.2 80.4,55 C80.4,63.9 68.8,68.2 53.5,68.2 C38,68.2 27,65 27.6,56.1 Z" />
+    <!-- Same anvil in one colour; Android tints it for themed icons. -->
+    <group
+        android:scaleX="0.268"
+        android:scaleY="0.268"
+        android:translateX="27.47"
+        android:translateY="37.65">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M6 18 C30 12 50 10 64 10 L192 10 L192 34 L150 34 C136 36 130 44 128 56 L128 78 C128 86 140 92 158 96 L168 100 L168 112 L52 112 L52 100 L62 96 C80 92 92 86 92 78 L92 56 C90 44 82 38 64 36 C44 34 24 28 6 18 Z" />
+    </group>
 </vector>

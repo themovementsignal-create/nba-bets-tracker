@@ -190,20 +190,15 @@ fun AboutScreen(nav: Nav) {
     LogScaffold("About", nav) {
         item {
             Column(Modifier.fillMaxWidth().padding(top = 40.dp, bottom = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Bear", style = MaterialTheme.typography.headlineLarge)
-                Gap(6)
-                // The hallmark: shown here only, quietly.
-                Text(
-                    "Durum patientia frango",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    letterSpacing = 0.5.sp,
-                )
+                BearWordmark(fontSize = 48.sp)
+                Gap(4)
+                BearMotto(fontSize = 19.sp)
             }
         }
         item { Muted("Build ${BuildConfig.VERSION_CODE} · v${BuildConfig.VERSION_NAME}") }
         item { Muted("Everything you log stays on this phone. Keep a backup from Backup, export & import.") }
         item { Muted("Snore detection uses Google's YAMNet sound model, Apache License 2.0.") }
+        item { Muted("Typefaces: Archivo, Archivo Black and Cormorant Garamond, SIL Open Font License 1.1.") }
     }
 }
 

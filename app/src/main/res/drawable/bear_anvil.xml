@@ -1,15 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The anvil from the Bear wordmark (the full stop). Source viewBox "2 6 194 110". -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <!-- Bear icon: the bronze anvil from the wordmark, centred well inside the 66dp safe zone. -->
-    <group
-        android:scaleX="0.268"
-        android:scaleY="0.268"
-        android:translateX="27.47"
-        android:translateY="37.65">
+    android:width="194dp"
+    android:height="110dp"
+    android:viewportWidth="194"
+    android:viewportHeight="110">
+    <group android:translateX="-2" android:translateY="-6">
         <path
             android:fillColor="#FFA8875A"
             android:pathData="M6 18 C30 12 50 10 64 10 L192 10 L192 34 L150 34 C136 36 130 44 128 56 L128 78 C128 86 140 92 158 96 L168 100 L168 112 L52 112 L52 100 L62 96 C80 92 92 86 92 78 L92 56 C90 44 82 38 64 36 C44 34 24 28 6 18 Z" />
