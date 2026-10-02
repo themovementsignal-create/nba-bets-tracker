@@ -9,10 +9,10 @@
 - After each change, tell me exactly what to test on my phone.
 
 ## Project facts
-- App name: **Bear**; the launcher label is lowercase `bear` (in `res/values/strings.xml`), matching the wordmark. Package name / applicationId / namespace: `com.muir.bear` (final; changing it makes Android treat it as a different app, losing updates and data).
+- App name: **Bear**; the launcher label is `Bear` (in `res/values/strings.xml`). Package name / applicationId / namespace: `com.muir.bear` (final; changing it makes Android treat it as a different app, losing updates and data).
 - Brand: read the brief at the top of SPEC.md before any design or copy decision. Quiet and honest: no gimmicks, streak-shaming or hype.
-- Logo: always use the `BearWordmark` composable (`ui/BearWordmark.kt`): lowercase "bear" in Archivo Black with the bronze anvil (`drawable/bear_anvil.xml`) as the full stop, anvil as wide as the "a", on the baseline. Never redraw it by hand.
-- Motto: "Durum patientia frango" (`BearMotto`, Cormorant Garamond italic, bronze) sits beneath the wordmark on the Home header and the About screen only.
+- Logo: always use the `BearWordmark` composable (`ui/BearWordmark.kt`): "BEAR" in Archivo Black capitals with a small bronze anvil (`drawable/bear_anvil.xml`) as the full stop: 0.38 × font size wide, on the baseline. Never redraw it by hand.
+- Motto: "Durum patientia frango" (`BearMotto`, Cormorant Garamond italic, softened bronze, small and discreet: 14sp) sits beneath the wordmark on the Home header and the About screen only.
 - Look: dark only. Theme tokens: background #121212, bronze accent #A8875A, text/wordmark #E9E3D7. Colours and fonts live in `ui/theme/Theme.kt`, window colours in `res/values/colors.xml`. Avoid purple.
 - Fonts are bundled in `res/font` (Archivo for the UI, Archivo Black for the wordmark, Cormorant Garamond italic for the motto), SIL OFL licences in `/licenses`.
 - Icon: adaptive icon in `res/mipmap-anydpi/ic_launcher.xml`: the bronze anvil centred on #121212 well inside the safe zone (`drawable/ic_launcher_foreground.xml`) plus a monochrome layer for themed icons.

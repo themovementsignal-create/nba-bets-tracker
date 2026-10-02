@@ -190,9 +190,9 @@ fun AboutScreen(nav: Nav) {
     LogScaffold("About", nav) {
         item {
             Column(Modifier.fillMaxWidth().padding(top = 40.dp, bottom = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                BearWordmark(fontSize = 48.sp)
+                BearWordmark(fontSize = 44.sp)
                 Gap(4)
-                BearMotto(fontSize = 19.sp)
+                BearMotto(fontSize = 15.sp)
             }
         }
         item { Muted("Build ${BuildConfig.VERSION_CODE} · v${BuildConfig.VERSION_NAME}") }

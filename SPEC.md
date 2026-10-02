@@ -7,7 +7,7 @@
 >
 > Training as a lifelong practice: bear the load, forbear the shortcuts. An honest, simple record of the whole person, built for the long game. No gimmicks, streak-shaming or hype.
 >
-> Logo: lowercase 'bear' in Archivo Black with a bronze anvil as the full stop. The anvil bears every blow and stays the same.
+> Logo: 'BEAR' in Archivo Black capitals with a small bronze anvil as the full stop. The anvil bears every blow and stays the same.
 
 Use this brief to guide every design decision.
 

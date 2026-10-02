@@ -15,7 +15,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import com.muir.bear.R
@@ -24,19 +23,20 @@ import com.muir.bear.ui.theme.BearColors
 import com.muir.bear.ui.theme.CormorantItalic
 
 /**
- * The logo: lowercase "bear" in Archivo Black with a bronze anvil as the full stop.
- * The anvil is as wide as the letter "a", sits on the text baseline, with a small gap after the "r".
- * Use this everywhere the logo appears so it's always identical.
+ * The logo: "BEAR" in Archivo Black capitals with a small bronze anvil as the full stop.
+ * The anvil is full-stop sized (0.38 × the font size wide), sits on the text baseline, with a
+ * small gap after the "R". Use this everywhere the logo appears so it's always identical.
  */
 @Composable
-fun BearWordmark(modifier: Modifier = Modifier, fontSize: TextUnit = 40.sp) {
-    val style = remember(fontSize) { TextStyle(fontFamily = ArchivoBlack, fontSize = fontSize, color = BearColors.Parchment) }
-    val measurer = rememberTextMeasurer()
+fun BearWordmark(modifier: Modifier = Modifier, fontSize: TextUnit = 36.sp) {
+    val style = remember(fontSize) {
+        TextStyle(fontFamily = ArchivoBlack, fontSize = fontSize, color = BearColors.Parchment, letterSpacing = fontSize * 0.02f)
+    }
     val density = LocalDensity.current
-    val anvilWidth = with(density) { measurer.measure("a", style).size.width.toDp() }
-    val gap = with(density) { (fontSize * 0.08f).toDp() }
-    Row(modifier.clearAndSetSemantics { contentDescription = "bear" }) {
-        Text("bear", style = style, modifier = Modifier.alignByBaseline())
+    val anvilWidth = with(density) { (fontSize * 0.38f).toDp() }
+    val gap = with(density) { (fontSize * 0.06f).toDp() }
+    Row(modifier.clearAndSetSemantics { contentDescription = "Bear" }) {
+        Text("BEAR", style = style, modifier = Modifier.alignByBaseline())
         Spacer(Modifier.width(gap))
         Image(
             painterResource(R.drawable.bear_anvil),
@@ -47,12 +47,15 @@ fun BearWordmark(modifier: Modifier = Modifier, fontSize: TextUnit = 40.sp) {
     }
 }
 
-/** The motto, set in Cormorant Garamond italic, bronze. */
+/** The motto: a quiet line in Cormorant Garamond italic, softened bronze. */
 @Composable
-fun BearMotto(modifier: Modifier = Modifier, fontSize: TextUnit = 17.sp) {
+fun BearMotto(modifier: Modifier = Modifier, fontSize: TextUnit = 14.sp) {
     Text(
         "Durum patientia frango",
         modifier = modifier,
-        style = TextStyle(fontFamily = CormorantItalic, fontStyle = FontStyle.Italic, fontSize = fontSize, color = BearColors.Bronze),
+        style = TextStyle(
+            fontFamily = CormorantItalic, fontStyle = FontStyle.Italic, fontSize = fontSize,
+            color = BearColors.Bronze.copy(alpha = 0.85f), letterSpacing = fontSize * 0.02f,
+        ),
     )
 }
