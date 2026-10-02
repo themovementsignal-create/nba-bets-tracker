@@ -4,8 +4,8 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Bear mark: a single smooth, heavy stone, slightly flattened as if settled under its own weight. Flat bronze, centred well inside the 66dp safe zone. -->
+    <!-- Same stone in one colour; Android tints it for themed icons. -->
     <path
-        android:fillColor="#FFA8875A"
+        android:fillColor="#FFFFFFFF"
         android:pathData="M27.6,56.1 C28.1,46.8 38.6,41.3 52.4,41.3 C67.2,41.3 80.4,46.2 80.4,55 C80.4,63.9 68.8,68.2 53.5,68.2 C38,68.2 27,65 27.6,56.1 Z" />
 </vector>

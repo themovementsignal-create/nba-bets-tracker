@@ -1,4 +1,13 @@
-# Training App Spec
+# Bear: Spec
+
+## Brand brief
+> **Bear.** Bear and forbear.
+>
+> *Durum patientia frango*: By patience I break what is hard.
+>
+> Training as a lifelong practice: bear the load, forbear the shortcuts. An honest, simple record of the whole person, built for the long game. No gimmicks, streak-shaming or hype.
+
+Use this brief to guide every design decision.
 
 ## Principles
 - Strong-level simplicity: logging a set takes 1–2 taps, and extras never clutter the workout screen.

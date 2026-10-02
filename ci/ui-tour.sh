@@ -2,7 +2,7 @@
 # Runs the UI tour on a booted emulator, then collects screenshots and logs.
 # Used by .github/workflows/ui-tour.yml. Never fails the step itself; the result is in tour-result.txt.
 set -u
-PKG=io.github.themovementsignal.training
+PKG=com.muir.bear
 
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk

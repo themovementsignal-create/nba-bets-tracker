@@ -1,7 +1,7 @@
 <resources>
     <!-- Window theme only; all real styling is done in Compose. Near-black so there is no flash on launch. -->
-    <style name="Theme.Training" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/agon_ink</item>
-        <item name="android:colorAccent">@color/agon_gold</item>
+    <style name="Theme.Bear" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/bear_ink</item>
+        <item name="android:colorAccent">@color/bear_bronze</item>
     </style>
 </resources>

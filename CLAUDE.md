@@ -1,18 +1,22 @@
-# Working on this repo
+# Bear: working on this repo
 - Read SPEC.md first. Work one checkbox at a time, and tick it off once it's working.
 - I build and test only from my phone via GitHub Actions. Keep main building at all times. Make small, focused commits.
 - I'm not an Android developer, but I'm analytical. Explain decisions briefly, in plain language.
 - Data safety: every Room schema change needs a proper migration. Never use destructive migration fallbacks. Never change the signing setup or package name.
+- The package name `com.muir.bear` is final and must never change.
 - Never commit secrets or keystores.
 - Ask before adding a major dependency or changing the architecture.
 - After each change, tell me exactly what to test on my phone.
 
 ## Project facts
-- App name: **Sig** (display name only, in `res/values/strings.xml`). Package name / applicationId: `io.github.themovementsignal.training` (permanent; changing it breaks updates and data).
-- Look: dark only, near-black + gold accent, bronze highlights; colours and fonts live in `ui/theme/Theme.kt`. Avoid purple.
+- App name: **Bear** (display name in `res/values/strings.xml`). Package name / applicationId / namespace: `com.muir.bear` (final; changing it makes Android treat it as a different app, losing updates and data).
+- Brand: read the brief at the top of SPEC.md before any design or copy decision. Quiet and honest: no gimmicks, streak-shaming or hype.
+- Hallmark: "Durum patientia frango" appears only on the About screen, small and understated, beneath the app name. Nowhere else.
+- Look: dark only, near-black (#121212) with a single muted bronze accent (#A8875A); colours and fonts live in `ui/theme/Theme.kt`, window colours in `res/values/colors.xml`. Avoid purple.
+- Icon: adaptive icon in `res/mipmap-anydpi/ic_launcher.xml`: a single flat bronze stone on near-black (`drawable/ic_launcher_foreground.xml`) plus a monochrome layer for themed icons. No letters, gradients or other elements.
 - Versions live in `gradle/libs.versions.toml`.
 - `.github/workflows/build.yml` builds a signed release APK (plus unit tests) on every push and, on `main`, publishes a GitHub Release tagged `build-<run number>`. versionCode = the Actions run number.
 - `.github/workflows/ui-tour.yml` runs on every branch except `main`: it boots an emulator, runs `UiTourTest` (clicks through every screen) and force-pushes screenshots, logcat and the result to the `ci-screenshots` branch. Check those screenshots before merging to `main`.
 - Signing secrets (repo Settings → Secrets → Actions): `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
-- Database: Room. Schema JSON history is committed in `app/schemas/` (v1 shipped in Build 8, v2 adds sleep tracking, steps and conditioning kind via AutoMigration). Any entity change needs a version bump, a migration and a `MigrationTest` case. CI publishes the generated schema JSON to the `ci-screenshots` branch.
-- Code map: `data/` (entities, DAO, seed), `domain/` (pure logic + unit tests: 1RM, plates, weekly load, Strong CSV), `io/DataIO.kt` (backup/restore/export/import), `timer/` (rest timer service), `sleep/` (overnight tracker + smart alarm, YAMNet snore model in `assets/yamnet.tflite`, Apache-2.0), `steps/` (pedometer), `ui/` (Compose screens).
+- Database: Room. Schema JSON history is committed in `app/schemas/` (v1 shipped in Build 8 under the old package, v2 adds sleep tracking, steps and conditioning kind via AutoMigration). Any entity change needs a version bump, a migration and a `MigrationTest` case. CI publishes the generated schema JSON to the `ci-screenshots` branch.
+- Code map (under `app/src/main/java/com/muir/bear/`): `data/` (entities, DAO, seed), `domain/` (pure logic + unit tests: 1RM, plates, weekly load, Strong CSV), `io/DataIO.kt` (backup/restore/export/import), `timer/` (rest timer service), `sleep/` (overnight tracker + smart alarm, YAMNet snore model in `assets/yamnet.tflite`, Apache-2.0), `steps/` (pedometer), `ui/` (Compose screens).

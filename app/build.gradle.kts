@@ -13,11 +13,11 @@ val keystoreFile: String? = System.getenv("KEYSTORE_FILE")
 
 android {
     // Package name is permanent: changing it makes Android treat the app as a different app.
-    namespace = "io.github.themovementsignal.training"
+    namespace = "com.muir.bear"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "io.github.themovementsignal.training"
+        applicationId = "com.muir.bear"
         minSdk = 28
         targetSdk = 37
         // CI passes -PversionCode=<run number>; local builds fall back to 1.
