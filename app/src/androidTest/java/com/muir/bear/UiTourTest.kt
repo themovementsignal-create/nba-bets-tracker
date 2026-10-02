@@ -118,6 +118,7 @@ class UiTourTest {
     @Test
     fun tour() {
         Log.i("UiTour", "start")
+        com.muir.bear.ui.Motion.animateLists = false
         // Home first (seed data loads in the background).
         compose.waitForIdle()
         shot("home-empty")

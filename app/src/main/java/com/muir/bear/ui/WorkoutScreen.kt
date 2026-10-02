@@ -238,8 +238,10 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
                 val dragging = dragKey == groupId
                 val itemModifier = if (dragging) {
                     Modifier.zIndex(1f).graphicsLayer { translationY = dragOffset; shadowElevation = 24f; scaleX = 1.02f; scaleY = 1.02f }
-                } else {
+                } else if (Motion.animateLists) {
                     Modifier.animateItem()
+                } else {
+                    Modifier
                 }
                 if (ex != null) Box(itemModifier) {
                     ExerciseBlock(
@@ -619,6 +621,14 @@ private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: Wor
             )
         }
     }
+}
+
+/**
+ * Lets the UI test switch off list-item move animations: they start inside a layout pass, which
+ * the Compose test clock can't handle (issuetracker.google.com/issues/325299275). Always on in the app.
+ */
+object Motion {
+    @Volatile var animateLists = true
 }
 
 private val RpeValues = listOf(6.0, 7.0, 8.0, 9.0, 10.0)
