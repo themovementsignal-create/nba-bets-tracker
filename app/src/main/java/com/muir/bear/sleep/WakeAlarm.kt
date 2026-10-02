@@ -198,14 +198,15 @@ class AlarmRingService : Service() {
             ErrorLog.log("ALARM", "Couldn't show the alarm screen", e)
             fallbackNotification(this)
         }
-        if (WakeAlarm.ringing.value) return
-        WakeAlarm.setRinging(true)
+        if (WakeAlarm.ringing.value || player != null || tone != null) return
         wakeLock = getSystemService(PowerManager::class.java)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "bear:alarm")
             .apply { acquire(MAX_RING_MS + 60_000L) }
         ensureAudible()
         startSound()
         vibrate()
+        // "Ringing" means the sound and vibration have actually started.
+        WakeAlarm.setRinging(true)
         // Never ring forever (e.g. phone left at home): stop after 30 minutes.
         handler.postDelayed({ stopSound(); WakeAlarm.cancel(this); finish() }, MAX_RING_MS)
     }
