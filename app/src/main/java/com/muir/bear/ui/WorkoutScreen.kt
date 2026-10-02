@@ -80,6 +80,7 @@ import com.muir.bear.data.Exercise
 import com.muir.bear.data.ExerciseType
 import com.muir.bear.data.WorkoutSet
 import com.muir.bear.domain.Calc
+import com.muir.bear.domain.Rpe
 import com.muir.bear.timer.RestTimer
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -113,11 +114,24 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
 
     // Best score per exercise from earlier workouts, for live PR trophies.
     var bestBefore by remember { mutableStateOf<Map<Long, Double>>(emptyMap()) }
+    // Effort-adjusted 1RM from the most recent session (last 6 weeks) where sets had an RPE.
+    var formE1rm by remember { mutableStateOf<Map<Long, Double>>(emptyMap()) }
     LaunchedEffect(exerciseIds, allExercises.size) {
+        val history = exerciseIds.associateWith { dao.history(it, workoutId) }
         bestBefore = exerciseIds.associateWith { id ->
             val type = allExercises[id]?.type ?: ExerciseType.WEIGHT_REPS
-            dao.history(id, workoutId).filter { it.set.kind != "W" }.maxOfOrNull { setScore(type, it.set) } ?: 0.0
+            history[id].orEmpty().filter { it.set.kind != "W" }.maxOfOrNull { setScore(type, it.set) } ?: 0.0
         }
+        val since = System.currentTimeMillis() - 42 * 86_400_000L
+        formE1rm = exerciseIds.mapNotNull { id ->
+            if (allExercises[id]?.type != ExerciseType.WEIGHT_REPS) return@mapNotNull null
+            val rated = history[id].orEmpty().filter {
+                it.startedAt >= since && it.set.kind != "W" && it.set.rpe != null && (it.set.weightKg ?: 0.0) > 0 && (it.set.reps ?: 0) > 0
+            }
+            val last = rated.firstOrNull()?.set?.workoutId ?: return@mapNotNull null
+            val e1rm = rated.filter { it.set.workoutId == last }.maxOf { Rpe.e1rm(it.set.weightKg!!, it.set.reps!!, it.set.rpe) }
+            id to e1rm
+        }.toMap()
     }
 
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -241,6 +255,7 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
                         sets = groupSets.sortedBy { it.setIndex },
                         previous = previous[ex.id].orEmpty(),
                         prBest = bestBefore[ex.id] ?: 0.0,
+                        formE1rm = formE1rm[ex.id],
                         rest = rest,
                         now = now,
                         onAddSet = { scope.launch { Actions.addSet(workoutId, order) } },
@@ -351,6 +366,7 @@ private fun ExerciseBlock(
     sets: List<WorkoutSet>,
     previous: List<WorkoutSet>,
     prBest: Double,
+    formE1rm: Double?,
     rest: RestTimer.State?,
     now: Long,
     onAddSet: () -> Unit,
@@ -397,6 +413,21 @@ private fun ExerciseBlock(
                     DropdownMenuItem(text = { Text("Move down") }, onClick = { menu = false; onMove(1) })
                     DropdownMenuItem(text = { Text("Remove exercise") }, onClick = { menu = false; onRemove() })
                 }
+            }
+        }
+        // Suggested load from your recent effort ratings: reps from the plan, aiming for RPE 8.
+        if (formE1rm != null) {
+            val reps = sets.firstOrNull { it.kind != "W" && !it.completed }?.let { s ->
+                targetPlaceholder(s.target).toDoubleOrNull()?.toInt()
+            } ?: previous.firstOrNull()?.reps
+            val load = reps?.let { Rpe.suggestedLoad(formE1rm, it, 8.0) }
+            if (reps != null && load != null && load > 0) {
+                Text(
+                    "Suggested: ${Calc.fmt(load)} kg × $reps @ 8",
+                    Modifier.padding(start = 4.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
         Gap(4)

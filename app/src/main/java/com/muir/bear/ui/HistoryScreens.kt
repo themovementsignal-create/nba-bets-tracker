@@ -47,6 +47,7 @@ import com.muir.bear.data.SetWithTime
 import com.muir.bear.data.WorkoutSet
 import com.muir.bear.domain.Calc
 import com.muir.bear.domain.Muscles
+import com.muir.bear.domain.Rpe
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlin.math.roundToLong
@@ -95,6 +96,13 @@ fun personalRecords(type: String, history: List<SetWithTime>): List<PrLine> {
         else -> {
             best("Estimated 1RM", { Calc.epley(it.weightKg ?: 0.0, it.reps ?: 0) }) {
                 "${Calc.fmt(Calc.epley(it.set.weightKg ?: 0.0, it.set.reps ?: 0))} kg (${describeSet(type, it.set)})"
+            }
+            if (type == ExerciseType.WEIGHT_REPS) {
+                // Only from sets you rated: the RTS chart accounts for reps left in the tank.
+                best("Effort-adjusted 1RM", { if (it.rpe != null) Rpe.e1rm(it.weightKg ?: 0.0, it.reps ?: 0, it.rpe) else null }) {
+                    "${Calc.fmt(Calc.round2(Rpe.e1rm(it.set.weightKg ?: 0.0, it.set.reps ?: 0, it.set.rpe)).let { v -> Math.round(v * 2) / 2.0 })} kg " +
+                        "(${describeSet(type, it.set)} @ ${Calc.fmt(it.set.rpe)})"
+                }
             }
             best("Heaviest weight", { it.weightKg }) { describeSet(type, it.set) }
             best("Most reps", { it.reps?.toDouble() }) { describeSet(type, it.set) }
