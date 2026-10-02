@@ -7,6 +7,7 @@ import android.media.AudioAttributes
 import android.media.RingtoneManager
 import com.muir.bear.data.AppDatabase
 import com.muir.bear.data.TrainingDao
+import com.muir.bear.data.MuscleData
 import com.muir.bear.data.migrateDataV2
 import com.muir.bear.data.seedIfNeeded
 import com.muir.bear.steps.Steps
@@ -19,6 +20,7 @@ import kotlinx.coroutines.launch
 
 /** App-wide singletons. Kept deliberately simple: one database, one background scope. */
 object Graph {
+    lateinit var app: android.content.Context
     lateinit var db: AppDatabase
     val dao: TrainingDao get() = db.dao()
     val scope = CoroutineScope(
@@ -30,10 +32,12 @@ class TrainingApp : Application() {
     override fun onCreate() {
         super.onCreate()
         ErrorLog.init(this)
+        Graph.app = applicationContext
         Graph.db = AppDatabase.build(this)
         Graph.scope.launch {
             seedIfNeeded(Graph.db)
             migrateDataV2(Graph.db)
+            MuscleData.fillMissing()
             DataIO.autoBackupIfDue(this@TrainingApp)
         }
         createChannels()

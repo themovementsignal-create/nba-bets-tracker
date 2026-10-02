@@ -11,6 +11,7 @@ import com.muir.bear.BuildConfig
 import com.muir.bear.ErrorLog
 import com.muir.bear.Graph
 import com.muir.bear.data.Exercise
+import com.muir.bear.data.MuscleData
 import com.muir.bear.data.ExerciseType
 import com.muir.bear.data.Workout
 import com.muir.bear.data.WorkoutSet
@@ -112,6 +113,8 @@ object DataIO {
                 }
             }
         }
+        // Backups from before v3 have no muscles; fill them in again.
+        MuscleData.fillMissing()
         return RestoreResult(tableCount, rowCount)
     }
 
@@ -141,7 +144,8 @@ object DataIO {
                 listOf(
                     date, w.name, "${durMin}m", exercises[s.exerciseId]?.name ?: "Unknown", order,
                     Calc.fmt(s.weightKg), "kg", s.reps ?: "", Calc.fmt(s.distanceM), "m", s.seconds ?: "",
-                    "", w.notes, w.rpe ?: "",
+                    // Strong's RPE column is per set (session RPE lives in the JSON backup).
+                    "", w.notes, s.rpe?.let { Calc.fmt(it) } ?: "",
                 ).joinToString(",") { csv(it) }
             ).append('\n')
         }
@@ -278,6 +282,7 @@ object DataIO {
                             weightKg = weight?.takeIf { it != 0.0 || ex.type == ExerciseType.WEIGHT_REPS },
                             reps = r.reps, seconds = r.seconds, distanceM = r.distanceM,
                             completed = true, completedAt = start, kind = r.kind,
+                            rpe = r.rpe?.takeIf { it in 1.0..10.0 },
                         )
                     }
                 }
@@ -285,6 +290,7 @@ object DataIO {
                 sets += toInsert.size
             }
         }
+        MuscleData.fillMissing()
         return ImportResult(workouts, sets, duplicates, created, parsed.skippedRows, parsed.problems)
     }
 }

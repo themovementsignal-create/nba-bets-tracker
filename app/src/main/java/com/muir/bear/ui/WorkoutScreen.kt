@@ -37,6 +37,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -423,6 +424,12 @@ private fun ExerciseBlock(
             val above = sets.getOrNull(i - 1)
             key(s.id) {
                 SetRow(exercise, s, label, prev, above, prBest)
+                // Optional effort, asked right after ticking a working set; gone once you move on.
+                val askRpe = s.completed && s.rpe == null && s.kind != "W" &&
+                    (exercise.type == ExerciseType.WEIGHT_REPS || exercise.type == ExerciseType.BODYWEIGHT) &&
+                    sets.getOrNull(i + 1)?.completed != true &&
+                    now - (s.completedAt ?: 0L) < 10 * 60_000L
+                if (askRpe) RpePrompt(s)
                 if (exercise.restSeconds > 0) {
                     RestDivider(exercise, s, rest, now, onActiveClick = onOpenTimer, onPlannedClick = onPickRest)
                 }
@@ -498,6 +505,11 @@ private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: Wor
     }
 
     var menu by remember { mutableStateOf(false) }
+    var rpeMenu by remember { mutableStateOf(false) }
+    if (rpeMenu) RpeDialog(set.rpe, onDismiss = { rpeMenu = false }) { v ->
+        rpeMenu = false
+        scope.launch { dao.updateSet(set.copy(rpe = v)) }
+    }
     val done = set.completed
     val rowColor = if (done) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent
     Row(
@@ -505,16 +517,29 @@ private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: Wor
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(SetCol)) {
-            Text(
-                label,
-                Modifier.fillMaxWidth().clickable { menu = true }.padding(vertical = 10.dp),
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.Bold,
-                color = if (set.kind == "W") MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface,
-            )
+            Column(
+                Modifier.fillMaxWidth().clickable { menu = true }.padding(vertical = if (set.rpe != null) 4.dp else 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    label,
+                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Bold,
+                    color = if (set.kind == "W") MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface,
+                )
+                set.rpe?.let {
+                    Text("@${Calc.fmt(it)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                }
+            }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 listOf("" to "Normal set", "W" to "Warm-up", "D" to "Drop set", "F" to "To failure").forEach { (k, name) ->
                     DropdownMenuItem(text = { Text(name) }, onClick = { menu = false; scope.launch { dao.updateSet(set.copy(kind = k)) } })
+                }
+                if (set.kind != "W") {
+                    DropdownMenuItem(
+                        text = { Text(if (set.rpe == null) "Set effort (RPE)…" else "Effort: RPE ${Calc.fmt(set.rpe)}…") },
+                        onClick = { menu = false; rpeMenu = true },
+                    )
                 }
                 DropdownMenuItem(text = { Text("Delete set") }, onClick = { menu = false; scope.launch { dao.deleteSet(set) } })
             }
@@ -563,6 +588,51 @@ private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: Wor
             )
         }
     }
+}
+
+private val RpeValues = listOf(6.0, 7.0, 8.0, 9.0, 10.0)
+
+/** Slim, optional effort row under a just-ticked set: one tap, or ignore it. */
+@Composable
+private fun RpePrompt(set: WorkoutSet) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 8.dp, top = 2.dp, bottom = 2.dp).testTag("rpePrompt"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("How hard?", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("10 = nothing left · 8 = 2 reps left", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+        }
+        RpeValues.forEach { v ->
+            Box(
+                Modifier.padding(start = 4.dp).size(36.dp)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(8.dp))
+                    .clickable { Graph.scope.launch { Graph.dao.updateSet(set.copy(rpe = v)) } },
+                contentAlignment = Alignment.Center,
+            ) { Text(Calc.fmt(v), style = MaterialTheme.typography.labelLarge) }
+        }
+    }
+}
+
+@Composable
+private fun RpeDialog(current: Double?, onDismiss: () -> Unit, onPick: (Double?) -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Effort (RPE)") },
+        text = {
+            Column {
+                Muted("How many more reps could you have done? 10 = none, 9 = one, 8 = two, 7 = three, 6 = four or more.")
+                Gap(8)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(6.0, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0).forEach { v ->
+                        FilterChip(selected = v == current, onClick = { onPick(v) }, label = { Text(Calc.fmt(v)) })
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        dismissButton = { if (current != null) TextButton(onClick = { onPick(null) }) { Text("Clear") } },
+    )
 }
 
 /** Compact filled number box (like Strong's), with the previous value as a grey placeholder. */

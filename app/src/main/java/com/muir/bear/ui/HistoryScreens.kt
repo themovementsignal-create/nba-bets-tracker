@@ -42,9 +42,11 @@ import com.muir.bear.data.Equipment
 import com.muir.bear.data.Exercise
 import com.muir.bear.data.ExerciseAlt
 import com.muir.bear.data.ExerciseType
+import com.muir.bear.data.MuscleData
 import com.muir.bear.data.SetWithTime
 import com.muir.bear.data.WorkoutSet
 import com.muir.bear.domain.Calc
+import com.muir.bear.domain.Muscles
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlin.math.roundToLong
@@ -350,6 +352,8 @@ fun ExerciseEditScreen(exerciseId: Long?, nav: Nav) {
     var name by remember { mutableStateOf("") }
     var type by remember { mutableStateOf(ExerciseType.WEIGHT_REPS) }
     var equipment by remember { mutableStateOf(setOf<String>()) }
+    var muscles by remember { mutableStateOf(setOf<String>()) }
+    var secondary by remember { mutableStateOf(setOf<String>()) }
     var rest by remember { mutableStateOf("120") }
     var barId by remember { mutableStateOf<Long?>(null) }
     var archived by remember { mutableStateOf(false) }
@@ -362,6 +366,7 @@ fun ExerciseEditScreen(exerciseId: Long?, nav: Nav) {
         if (exerciseId != null) {
             dao.exercise(exerciseId)?.let { e ->
                 original = e; name = e.name; type = e.type; equipment = Calc.tags(e.equipment)
+                muscles = Calc.tags(e.muscles); secondary = Calc.tags(e.secondaryMuscles)
                 rest = e.restSeconds.toString(); barId = e.barId; archived = e.archived
             }
             alts = dao.alternatives(exerciseId)
@@ -393,6 +398,25 @@ fun ExerciseEditScreen(exerciseId: Long?, nav: Nav) {
                         equipment = if (tag in equipment) equipment - tag else equipment + tag
                     }
                     Muted("Used to swap exercises automatically at venues that lack this equipment.")
+                }
+            }
+            item {
+                SectionCard("Muscles worked") {
+                    Text("Main", style = MaterialTheme.typography.labelLarge)
+                    ChipGroup(Muscles.all, muscles, Muscles::label) { m ->
+                        muscles = if (m in muscles) muscles - m else muscles + m
+                        secondary = secondary - m
+                    }
+                    Gap(8)
+                    Text("Also works", style = MaterialTheme.typography.labelLarge)
+                    ChipGroup(Muscles.all, secondary, Muscles::label) { m ->
+                        secondary = if (m in secondary) secondary - m else secondary + m
+                        muscles = muscles - m
+                    }
+                    TextButton(enabled = name.isNotBlank(), onClick = {
+                        MuscleData.lookup(name)?.let { muscles = it.primary.toSet(); secondary = it.secondary.toSet() }
+                    }) { Text("Suggest from name") }
+                    Muted("Used to count weekly hard sets per muscle. Main = 1 set, also works = ½ set.")
                 }
             }
             item { NumberField(rest, { rest = it }, "Rest timer (seconds)", Modifier.fillMaxWidth(), decimal = false) }
@@ -431,11 +455,22 @@ fun ExerciseEditScreen(exerciseId: Long?, nav: Nav) {
                         try {
                             val o = original
                             if (o == null) {
+                                // New exercise with no muscles picked: fill them in from the name if we know it.
+                                val guess = if (muscles.isEmpty() && secondary.isEmpty()) MuscleData.lookup(name) else null
                                 dao.insertExercise(
-                                    Exercise(name = name.trim(), type = type, equipment = equipment.joinToString(","), restSeconds = restSec, barId = barId, isCustom = true)
+                                    Exercise(
+                                        name = name.trim(), type = type, equipment = equipment.joinToString(","), restSeconds = restSec, barId = barId, isCustom = true,
+                                        muscles = guess?.primary?.joinToString(",") ?: muscles.joinToString(","),
+                                        secondaryMuscles = guess?.secondary?.joinToString(",") ?: secondary.joinToString(","),
+                                    )
                                 )
                             } else {
-                                dao.updateExercise(o.copy(name = name.trim(), type = type, equipment = equipment.joinToString(","), restSeconds = restSec, barId = barId, archived = archived))
+                                dao.updateExercise(
+                                    o.copy(
+                                        name = name.trim(), type = type, equipment = equipment.joinToString(","), restSeconds = restSec, barId = barId, archived = archived,
+                                        muscles = muscles.joinToString(","), secondaryMuscles = secondary.joinToString(","),
+                                    )
+                                )
                             }
                             nav.back()
                         } catch (e: Exception) {

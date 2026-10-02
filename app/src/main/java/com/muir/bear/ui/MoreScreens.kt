@@ -199,6 +199,7 @@ fun AboutScreen(nav: Nav) {
         item { Muted("Everything you log stays on this phone. Keep a backup from Backup, export & import.") }
         item { Muted("Snore detection uses Google's YAMNet sound model, Apache License 2.0.") }
         item { Muted("Typefaces: Archivo, Archivo Black and Cormorant Garamond, SIL Open Font License 1.1.") }
+        item { Muted("Muscles-worked data from free-exercise-db (public domain).") }
     }
 }
 

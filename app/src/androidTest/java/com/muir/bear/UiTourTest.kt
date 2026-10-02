@@ -10,6 +10,7 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -139,6 +140,10 @@ class UiTourTest {
         hideKeyboard()
         compose.waitForIdle()
         shot("workout-inline-rest-timer")
+        // Optional effort for the set just ticked.
+        compose.onNode(hasText("8") and hasAnyAncestor(hasTestTag("rpePrompt"))).performClick()
+        waitFor("@8")
+        shot("workout-rpe")
         // Big rest timer from the header pill: ring, −15/+15, Skip.
         compose.onNodeWithTag("restPill").performClick()
         waitFor("Skip")

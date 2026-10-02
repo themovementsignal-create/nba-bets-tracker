@@ -19,11 +19,13 @@ import androidx.room.RoomDatabase
         SupplementLog::class, Bar::class, Venue::class, JumpTest::class, Setting::class,
         SleepSample::class, DailySteps::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
     autoMigrations = [
         // v2: conditioning kind, tracked-sleep summary columns, sleep samples, daily steps (additions only).
         AutoMigration(from = 1, to = 2),
+        // v3: muscles worked per exercise, optional RPE per set (additions only).
+        AutoMigration(from = 2, to = 3),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {

@@ -62,6 +62,10 @@ data class Exercise(
     val notes: String = "",
     val isCustom: Boolean = false,
     val archived: Boolean = false,
+    /** Main muscles worked, comma-separated, using the [com.muir.bear.domain.Muscles] names. (v3) */
+    @ColumnInfo(defaultValue = "") val muscles: String = "",
+    /** Muscles that also work (count as half a set each). (v3) */
+    @ColumnInfo(defaultValue = "") val secondaryMuscles: String = "",
 )
 
 /** Ordered alternatives for an exercise (used for swaps and venue substitutions). */
@@ -136,6 +140,8 @@ data class WorkoutSet(
     /** "" normal, "W" warm-up, "D" drop, "F" failure. */
     val kind: String = "",
     val target: String = "",
+    /** Optional effort, RPE 6–10 (10 = no reps left in the tank). (v3) */
+    val rpe: Double? = null,
 )
 
 /** Basketball, conditioning and NEAT/treadmill sessions. */
