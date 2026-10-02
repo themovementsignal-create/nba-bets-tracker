@@ -64,6 +64,21 @@ class WakeAlarmTest {
     }
 
     @Test
+    fun alarmSurvivesARebootBeforeUnlock() {
+        // The alarm time is kept where Android can read it before you unlock after a reboot...
+        val at = System.currentTimeMillis() + 2 * 60 * 60_000L
+        WakeAlarm.schedule(context, at)
+        val dp = context.createDeviceProtectedStorageContext().getSharedPreferences("bear_alarm", android.content.Context.MODE_PRIVATE)
+        assertEquals(at, dp.getLong("next_at", -1L))
+        // ...and the pieces that put it back and ring it are allowed to run then (direct boot).
+        val pm = context.packageManager
+        val flags = android.content.pm.PackageManager.MATCH_DIRECT_BOOT_AWARE or android.content.pm.PackageManager.MATCH_DIRECT_BOOT_UNAWARE
+        assertTrue(pm.getReceiverInfo(android.content.ComponentName(context, com.muir.bear.sleep.AlarmBootReceiver::class.java), flags).directBootAware)
+        assertTrue(pm.getReceiverInfo(android.content.ComponentName(context, com.muir.bear.sleep.SleepAlarmReceiver::class.java), flags).directBootAware)
+        assertTrue(pm.getServiceInfo(android.content.ComponentName(context, com.muir.bear.sleep.AlarmRingService::class.java), flags).directBootAware)
+    }
+
+    @Test
     fun restoreReArmsAPendingAlarm() {
         val at = System.currentTimeMillis() + 60 * 60_000L
         WakeAlarm.schedule(context, at)

@@ -1,6 +1,12 @@
 package com.muir.bear
 
 import android.app.Application
+import android.os.UserManager
+import android.content.IntentFilter
+import android.content.Intent
+import android.content.Context
+import android.content.BroadcastReceiver
+import androidx.core.content.ContextCompat
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.media.AudioAttributes
@@ -23,7 +29,8 @@ import kotlinx.coroutines.launch
 /** App-wide singletons. Kept deliberately simple: one database, one background scope. */
 object Graph {
     lateinit var app: android.content.Context
-    lateinit var db: AppDatabase
+    /** Opened on first use: after a reboot, before you unlock, the database can't be opened yet. */
+    val db: AppDatabase by lazy { AppDatabase.build(app) }
     val dao: TrainingDao get() = db.dao()
     val scope = CoroutineScope(
         SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, e -> ErrorLog.log("BG", "Background task failed", e) }
@@ -33,11 +40,26 @@ object Graph {
 class TrainingApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        ErrorLog.init(this)
         Graph.app = applicationContext
+        createChannels()
         // Make sure a pending wake-up alarm is armed (e.g. after the app was force-closed).
         WakeAlarm.restore(this)
-        Graph.db = AppDatabase.build(this)
+        if (getSystemService(UserManager::class.java).isUserUnlocked) {
+            startUnlocked()
+        } else {
+            // Rebooted and not unlocked yet: only the alarm runs now; everything else after unlock.
+            ContextCompat.registerReceiver(this, object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    runCatching { unregisterReceiver(this) }
+                    startUnlocked()
+                }
+            }, IntentFilter(Intent.ACTION_USER_UNLOCKED), ContextCompat.RECEIVER_NOT_EXPORTED)
+        }
+    }
+
+    private fun startUnlocked() {
+        ErrorLog.init(this)
+        WakeAlarm.restore(this)
         Graph.scope.launch {
             seedIfNeeded(Graph.db)
             migrateDataV2(Graph.db)
@@ -47,7 +69,6 @@ class TrainingApp : Application() {
             SleepTracker.closeStaleNights(this@TrainingApp)
             DataIO.autoBackupIfDue(this@TrainingApp)
         }
-        createChannels()
         Steps.scheduleNightly(this)
     }
 

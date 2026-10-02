@@ -65,6 +65,7 @@
 
         <service
             android:name=".sleep.AlarmRingService"
+            android:directBootAware="true"
             android:exported="false"
             android:foregroundServiceType="specialUse">
             <property
@@ -74,12 +75,16 @@
 
         <receiver
             android:name=".sleep.SleepAlarmReceiver"
+            android:directBootAware="true"
             android:exported="false" />
 
         <receiver
             android:name=".sleep.AlarmBootReceiver"
+            android:directBootAware="true"
             android:exported="true">
             <intent-filter>
+                <!-- Delivered after a reboot before unlock (direct boot), so the alarm is back at once. -->
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.intent.action.TIME_SET" />

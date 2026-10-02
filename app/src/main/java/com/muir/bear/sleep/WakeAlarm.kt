@@ -61,7 +61,25 @@ object WakeAlarm {
 
     internal fun setRinging(v: Boolean) { _ringing.value = v }
 
-    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    @Volatile private var migrated = false
+
+    /**
+     * Stored in device-protected storage, which Android lets us read after a reboot before you
+     * unlock, so the alarm can be put back straight away. Only the alarm time lives there.
+     */
+    private fun prefs(context: Context): android.content.SharedPreferences {
+        val app = context.applicationContext
+        val dp = app.createDeviceProtectedStorageContext()
+        if (!migrated && isUnlocked(app)) {
+            // One-off move from the old (unlock-only) location.
+            runCatching { dp.moveSharedPreferencesFrom(app, PREFS) }
+            migrated = true
+        }
+        return dp.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    }
+
+    fun isUnlocked(context: Context): Boolean =
+        context.getSystemService(android.os.UserManager::class.java)?.isUserUnlocked != false
 
     private fun ringIntent(context: Context): PendingIntent = PendingIntent.getBroadcast(
         context, 61, Intent(context, SleepAlarmReceiver::class.java),
@@ -241,7 +259,8 @@ class AlarmRingService : Service() {
                 }
             }.onFailure { e -> ErrorLog.log("ALARM", "Alarm sound failed: $uri", e) }.getOrNull()
         }
-        val picked = runCatching { runBlocking { Graph.dao.setting(Settings.ALARM_SOUND) } }.getOrNull()
+        // Before the first unlock after a reboot your settings are locked away: use the default sound.
+        val picked = if (WakeAlarm.isUnlocked(this)) runCatching { runBlocking { Graph.dao.setting(Settings.ALARM_SOUND) } }.getOrNull() else null
         // Your sound -> the phone's alarm sound -> Bear's own chime (bundled, can't go missing)
         // -> the ringtone -> plain beeps.
         val bundled = android.net.Uri.parse("android.resource://$packageName/${R.raw.bear_alarm}")
