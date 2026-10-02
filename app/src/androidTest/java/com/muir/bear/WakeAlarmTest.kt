@@ -50,6 +50,8 @@ class WakeAlarmTest {
 
         waitUntil(30_000, "alarm to ring") { WakeAlarm.ringing.value }
         Log.i("WakeAlarmTest", "ringing; sound source = ${WakeAlarm.soundSource}")
+        // Something must actually be playing (the bundled chime at the very least).
+        assertTrue("no alarm sound played", WakeAlarm.soundSource != "none")
 
         WakeAlarm.snooze(context)
         waitUntil(10_000, "snooze to silence it") { !WakeAlarm.ringing.value }

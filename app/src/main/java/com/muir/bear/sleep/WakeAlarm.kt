@@ -51,7 +51,7 @@ object WakeAlarm {
     private val _ringing = MutableStateFlow(false)
     val ringing: StateFlow<Boolean> = _ringing
 
-    /** What is making the noise: "chosen", "default", "ringtone", "beeps" or "none" (for checks and tests). */
+    /** What is making the noise: "chosen", "default", "bundled", "ringtone", "beeps" or "none" (for checks and tests). */
     @Volatile var soundSource: String = "none"
         internal set
 
@@ -241,14 +241,19 @@ class AlarmRingService : Service() {
             }.onFailure { e -> ErrorLog.log("ALARM", "Alarm sound failed: $uri", e) }.getOrNull()
         }
         val picked = runCatching { runBlocking { Graph.dao.setting(Settings.ALARM_SOUND) } }.getOrNull()
-        val chosen = picked?.takeIf { it.isNotBlank() }?.let { play(android.net.Uri.parse(it)) }
-        player = chosen
-            ?: play(android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM))
-            ?: play(android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE))
-        WakeAlarm.soundSource = when {
-            chosen != null -> "chosen"
-            player != null -> "default"
-            else -> "none"
+        // Your sound -> the phone's alarm sound -> Bear's own chime (bundled, can't go missing)
+        // -> the ringtone -> plain beeps.
+        val bundled = android.net.Uri.parse("android.resource://$packageName/${R.raw.bear_alarm}")
+        val tries = listOf(
+            "chosen" to picked?.takeIf { it.isNotBlank() }?.let { android.net.Uri.parse(it) },
+            "default" to android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM),
+            "bundled" to bundled,
+            "ringtone" to android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE),
+        )
+        WakeAlarm.soundSource = "none"
+        for ((name, uri) in tries) {
+            player = play(uri)
+            if (player != null) { WakeAlarm.soundSource = name; break }
         }
         if (player != null) {
             // Gentle start, full volume within about 30 seconds.
