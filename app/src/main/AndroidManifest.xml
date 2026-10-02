@@ -9,6 +9,9 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- Wake-up alarm: re-arm after a reboot, and let the user exempt Bear from battery saving overnight. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <!-- Morning HRV: fingertip over the camera with the torch on. -->
@@ -60,9 +63,29 @@
                 android:value="Overnight sleep tracking with a smart wake-up alarm" />
         </service>
 
+        <service
+            android:name=".sleep.AlarmRingService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Alarm clock: plays the wake-up alarm the user set" />
+        </service>
+
         <receiver
             android:name=".sleep.SleepAlarmReceiver"
             android:exported="false" />
+
+        <receiver
+            android:name=".sleep.AlarmBootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
         <receiver
             android:name=".steps.StepsAlarmReceiver"

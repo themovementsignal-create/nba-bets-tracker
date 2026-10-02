@@ -8,6 +8,8 @@ import android.media.RingtoneManager
 import com.muir.bear.data.AppDatabase
 import com.muir.bear.data.TrainingDao
 import com.muir.bear.data.MuscleData
+import com.muir.bear.sleep.SleepTracker
+import com.muir.bear.sleep.WakeAlarm
 import com.muir.bear.data.migrateDataV2
 import com.muir.bear.data.seedIfNeeded
 import com.muir.bear.steps.Steps
@@ -33,11 +35,16 @@ class TrainingApp : Application() {
         super.onCreate()
         ErrorLog.init(this)
         Graph.app = applicationContext
+        // Make sure a pending wake-up alarm is armed (e.g. after the app was force-closed).
+        WakeAlarm.restore(this)
         Graph.db = AppDatabase.build(this)
         Graph.scope.launch {
             seedIfNeeded(Graph.db)
             migrateDataV2(Graph.db)
             MuscleData.fillMissing()
+            // Give Android a moment to restart an interrupted tracker before tidying up old nights.
+            kotlinx.coroutines.delay(5_000)
+            SleepTracker.closeStaleNights(this@TrainingApp)
             DataIO.autoBackupIfDue(this@TrainingApp)
         }
         createChannels()

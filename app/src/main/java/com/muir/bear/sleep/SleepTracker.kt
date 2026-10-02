@@ -2,7 +2,6 @@ package com.muir.bear.sleep
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -16,10 +15,8 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioRecord
-import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.media.RingtoneManager
 import android.net.Uri
@@ -28,9 +25,6 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -71,8 +65,8 @@ object SleepTracker {
         val modelReady: Boolean,
         val minutes: Int = 0,
         val snoreSec: Int = 0,
-        val ringing: Boolean = false,
-        val snoozedUntil: Long? = null,
+        /** True after Bear restarted tracking by itself (e.g. the phone closed it overnight). */
+        val resumed: Boolean = false,
     )
 
     internal val _state = MutableStateFlow<Live?>(null)
@@ -111,7 +105,64 @@ object SleepTracker {
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
     fun stop(context: Context) = send(context, SleepTrackerService.ACTION_STOP)
-    fun snooze(context: Context) = send(context, SleepTrackerService.ACTION_SNOOZE)
+
+    /** Picks an interrupted night back up (from the Sleep screen). */
+    fun resume(context: Context) {
+        try {
+            ContextCompat.startForegroundService(context, Intent(context, SleepTrackerService::class.java).setAction(SleepTrackerService.ACTION_RESUME))
+        } catch (e: Exception) {
+            ErrorLog.log("SLEEP", "Could not resume tracking", e)
+        }
+    }
+
+    /** Ends a tracked night at [wakeAt]: stages, score and snoring from its samples. */
+    suspend fun closeNight(sleepId: Long, wakeAt: Long) {
+        val dao = Graph.dao
+        val samples = dao.sleepSamples(sleepId)
+        val summary = SleepAnalysis.summarise(samples.map { it.movement }, samples.map { it.snoreSec })
+        dao.sleep(sleepId)?.let { s ->
+            dao.updateSleep(
+                s.copy(
+                    wakeAt = wakeAt,
+                    score = summary.score.takeIf { summary.minutes >= 60 },
+                    deepMin = summary.deep, lightMin = summary.light, remMin = summary.rem,
+                    awakeMin = summary.awake, snoreMin = summary.snoreMin,
+                )
+            )
+        }
+    }
+
+    /**
+     * On app start: a tracked night still open with no tracker running is either still going
+     * (Android may restart the tracker) or clearly over, in which case close it at its last data.
+     */
+    suspend fun closeStaleNights(context: Context) {
+        if (_state.value != null) return
+        val dao = Graph.dao
+        for (s in dao.allSleeps().filter { it.tracked && it.wakeAt == null }) {
+            val last = dao.sleepSamples(s.id).maxOfOrNull { it.at }
+            val action = com.muir.bear.domain.SleepRecovery.decide(s.bedAt, s.alarmAt, last, System.currentTimeMillis())
+            if (action is com.muir.bear.domain.SleepRecovery.Close) {
+                closeNight(s.id, action.wakeAt)
+                ErrorLog.log("SLEEP", "Closed an interrupted night: tracking stopped at ${java.time.Instant.ofEpochMilli(action.wakeAt)}", null)
+                if (savedSession(context)?.sleepId == s.id) saveSession(context, null)
+            }
+        }
+    }
+
+    // What the tracker needs to pick a night back up after Android restarts it.
+    private const val PREFS = "bear_sleep"
+    internal fun saveSession(context: Context, live: Live?) {
+        val e = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        if (live == null) e.clear() else e.putLong("sleepId", live.sleepId).putLong("startedAt", live.startedAt)
+            .putLong("alarmAt", live.alarmAt ?: -1L).putInt("windowMin", live.windowMin).putBoolean("listen", live.listening)
+        e.apply()
+    }
+    internal fun savedSession(context: Context): Live? {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val id = p.getLong("sleepId", -1L).takeIf { it > 0 } ?: return null
+        return Live(id, p.getLong("startedAt", 0L), p.getLong("alarmAt", -1L).takeIf { it > 0 }, p.getInt("windowMin", 30), p.getBoolean("listen", false), modelReady = false)
+    }
 
     private fun send(context: Context, action: String) {
         try {
@@ -129,7 +180,6 @@ class SleepTrackerService : Service() {
     private var audioThread: Thread? = null
     @Volatile private var running = false
     private var classifier: AudioClassifier? = null
-    private var player: MediaPlayer? = null
 
     // Per-minute accumulators (written from sensor/audio threads).
     private val lock = Any()
@@ -158,19 +208,23 @@ class SleepTrackerService : Service() {
             } else {
                 enterForeground(SleepTracker.state.value!!.listening)
             }
-            ACTION_SNOOZE -> snooze()
+            ACTION_RESUME -> if (SleepTracker.state.value == null) resumeTracking(fromUser = true) else enterForeground(SleepTracker.state.value!!.listening)
             ACTION_SET_ALARM -> SleepTracker.state.value?.let { live ->
                 val alarmAt = intent.getLongExtra("alarmAt", -1L).takeIf { it > 0 }
-                SleepTracker._state.value = live.copy(alarmAt = alarmAt, windowMin = intent.getIntExtra("windowMin", live.windowMin))
-                cancelBackupAlarm()
-                alarmAt?.let { scheduleBackupAlarm(it) }
+                val updated = live.copy(alarmAt = alarmAt, windowMin = intent.getIntExtra("windowMin", live.windowMin))
+                SleepTracker._state.value = updated
+                SleepTracker.saveSession(this, updated)
+                if (alarmAt != null) WakeAlarm.schedule(this, alarmAt) else WakeAlarm.cancel(this)
                 Graph.scope.launch { Graph.dao.sleep(live.sleepId)?.let { Graph.dao.updateSleep(it.copy(alarmAt = alarmAt)) } }
                 updateNotification()
             }
             ACTION_STOP -> finishNight()
+            // Android restarted us after closing the app (intent is null): carry on with the night.
+            null -> if (SleepTracker.state.value == null) resumeTracking(fromUser = false)
             else -> if (SleepTracker.state.value == null) stopSelf()
         }
-        return START_NOT_STICKY
+        // Ask Android to restart the tracker if it has to close it overnight.
+        return START_STICKY
     }
 
     private fun hasMic() = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -188,22 +242,58 @@ class SleepTrackerService : Service() {
         val listen = listenWanted && hasMic()
         val now = System.currentTimeMillis()
         val sleepId = runBlocking { Graph.dao.insertSleep(Sleep(bedAt = now, tracked = true, alarmAt = alarmAt)) }
-        SleepTracker._state.value = SleepTracker.Live(sleepId, now, alarmAt, windowMin, listen, modelReady = false)
+        val live = SleepTracker.Live(sleepId, now, alarmAt, windowMin, listen, modelReady = false)
+        SleepTracker._state.value = live
+        SleepTracker.saveSession(this, live)
         enterForeground(listen)
-        running = true
+        // The alarm is held by Android itself, so it rings even if tracking is closed overnight.
+        if (alarmAt != null) WakeAlarm.schedule(this, alarmAt) else WakeAlarm.cancel(this)
+        beginSensing(listen)
+        Steps.sampleOnce(applicationContext) {}
+    }
 
+    private fun beginSensing(listen: Boolean) {
+        running = true
         wakeLock = getSystemService(PowerManager::class.java)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "bear:sleep")
             .apply { acquire(14 * 3600_000L) }
-
         sensorManager = getSystemService(SensorManager::class.java)
         sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let {
             sensorManager?.registerListener(motionListener, it, SensorManager.SENSOR_DELAY_NORMAL)
         }
         if (listen) startAudio()
         handler.postDelayed(minuteTick, 60_000)
-        alarmAt?.let { scheduleBackupAlarm(it) }
-        Steps.sampleOnce(applicationContext) {}
+    }
+
+    /**
+     * Picks the night back up after Android closed and restarted the tracker (or the user taps
+     * Resume). Movement always resumes; the microphone only if Android allows it from here.
+     */
+    private fun resumeTracking(fromUser: Boolean) {
+        val saved = SleepTracker.savedSession(this)
+        val open = saved?.let { runBlocking { Graph.dao.sleep(it.sleepId) } }?.takeIf { it.wakeAt == null }
+        if (saved == null || open == null) { SleepTracker.saveSession(this, null); stopSelf(); return }
+        val samples = runBlocking { Graph.dao.sleepSamples(open.id) }
+        nightMovement.clear()
+        nightMovement += samples.map { it.movement }
+        // From the background Android may refuse the microphone; fall back to movement only.
+        var listen = saved.listening && hasMic() && fromUser
+        try {
+            SleepTracker._state.value = saved.copy(listening = listen, minutes = samples.size, snoreSec = samples.sumOf { it.snoreSec }, resumed = true)
+            enterForeground(listen)
+        } catch (e: Exception) {
+            ErrorLog.log("SLEEP", "Resumed without the microphone", e)
+            listen = false
+            SleepTracker._state.value = SleepTracker._state.value?.copy(listening = false)
+            try { enterForeground(false) } catch (e2: Exception) {
+                ErrorLog.log("SLEEP", "Couldn't resume tracking", e2)
+                SleepTracker._state.value = null
+                stopSelf(); return
+            }
+        }
+        ErrorLog.log("SLEEP", "Tracking resumed (${if (fromUser) "by you" else "restarted by Android"}); last data ${samples.lastOrNull()?.at?.let { clock(it) } ?: "none"}", null)
+        WakeAlarm.restore(this)
+        beginSensing(listen)
     }
 
     // ---------- Movement ----------
@@ -325,105 +415,36 @@ class SleepTrackerService : Service() {
         updateNotification()
     }
 
+    /**
+     * Smart wake: inside the wake window, ring early when you're in light sleep. The alarm time
+     * itself is rung by Android ([WakeAlarm]), so it doesn't depend on this tick.
+     */
     private fun checkAlarm() {
         val live = SleepTracker.state.value ?: return
         val alarmAt = live.alarmAt ?: return
-        if (live.ringing) return
+        if (WakeAlarm.ringing.value) return
+        if (WakeAlarm.nextAt(this) != alarmAt) return // snoozed, cancelled or changed
         val now = System.currentTimeMillis()
-        val snoozed = live.snoozedUntil
-        val due = when {
-            snoozed != null -> now >= snoozed
-            now >= alarmAt -> true
-            now >= alarmAt - live.windowMin * 60_000L -> SleepAnalysis.isLightNow(nightMovement)
-            else -> false
+        if (now in (alarmAt - live.windowMin * 60_000L) until alarmAt && SleepAnalysis.isLightNow(nightMovement)) {
+            WakeAlarm.ringNow(this)
         }
-        if (due) ring()
-    }
-
-    private fun ring() {
-        val live = SleepTracker.state.value ?: return
-        SleepTracker._state.value = live.copy(ringing = true, snoozedUntil = null)
-        try {
-            val picked = runBlocking { Graph.dao.setting(Settings.ALARM_SOUND) }
-            fun play(uri: Uri?): MediaPlayer? = uri?.let {
-                runCatching {
-                    MediaPlayer().apply {
-                        setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
-                        setDataSource(this@SleepTrackerService, it)
-                        isLooping = true
-                        setVolume(0.05f, 0.05f)
-                        prepare()
-                        start()
-                    }
-                }.getOrNull()
-            }
-            // If the chosen sound can't be played (e.g. the file was deleted), use the phone's default.
-            player = play(SleepTracker.alarmSound(this, picked)) ?: play(SleepTracker.alarmSound(this, null))
-            if (player == null) ErrorLog.log("SLEEP", "No playable alarm sound", null)
-            // Gentle wake: volume rises over about a minute.
-            var step = 1
-            handler.post(object : Runnable {
-                override fun run() {
-                    val p = player ?: return
-                    val v = (0.05f + step * 0.05f).coerceAtMost(1f)
-                    runCatching { p.setVolume(v, v) }
-                    step++
-                    if (v < 1f) handler.postDelayed(this, 3_000)
-                }
-            })
-        } catch (e: Exception) {
-            ErrorLog.log("SLEEP", "Could not play the alarm sound", e)
-        }
-        vibrateRepeating()
-        val nm = getSystemService(NotificationManager::class.java)
-        runCatching { nm.notify(NOTIF_ALARM, alarmNotification()) }
-    }
-
-    private fun stopRinging() {
-        player?.let { runCatching { it.stop() }; it.release() }
-        player = null
-        vibrator().cancel()
-        getSystemService(NotificationManager::class.java).cancel(NOTIF_ALARM)
-    }
-
-    private fun snooze() {
-        val live = SleepTracker.state.value ?: return
-        stopRinging()
-        SleepTracker._state.value = live.copy(ringing = false, snoozedUntil = System.currentTimeMillis() + 9 * 60_000L)
-        handler.removeCallbacks(minuteTick)
-        handler.postDelayed(minuteTick, 30_000)
-        updateNotification()
     }
 
     private fun finishNight() {
         val live = SleepTracker.state.value
-        stopRinging()
+        // Awake: silence a ringing alarm, or cancel tonight's if you're up before it.
+        if (WakeAlarm.ringing.value) WakeAlarm.dismiss(this) else if (!WakeAlarm.isTest(this)) WakeAlarm.cancel(this)
         running = false
         handler.removeCallbacksAndMessages(null)
         sensorManager?.unregisterListener(motionListener)
         audioThread?.join(1500)
         classifier?.close()
         classifier = null
-        cancelBackupAlarm()
+        SleepTracker.saveSession(this, null)
         if (live != null) {
             flushMinute()
-            val sleepId = live.sleepId
-            runBlocking {
-                val dao = Graph.dao
-                val samples = dao.sleepSamples(sleepId)
-                val summary = SleepAnalysis.summarise(samples.map { it.movement }, samples.map { it.snoreSec })
-                dao.sleep(sleepId)?.let { s ->
-                    dao.updateSleep(
-                        s.copy(
-                            wakeAt = System.currentTimeMillis(),
-                            score = summary.score.takeIf { summary.minutes >= 60 },
-                            deepMin = summary.deep, lightMin = summary.light, remMin = summary.rem,
-                            awakeMin = summary.awake, snoreMin = summary.snoreMin,
-                        )
-                    )
-                }
-            }
-            SleepTracker.justFinished.value = sleepId
+            runBlocking { SleepTracker.closeNight(live.sleepId, System.currentTimeMillis()) }
+            SleepTracker.justFinished.value = live.sleepId
         }
         Steps.sampleOnce(applicationContext) {}
         SleepTracker._state.value = null
@@ -431,27 +452,6 @@ class SleepTrackerService : Service() {
         wakeLock = null
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
-    }
-
-    // ---------- Backup alarm (if the tracker were killed overnight) ----------
-
-    private fun backupIntent(): PendingIntent = PendingIntent.getBroadcast(
-        this, 51, Intent(this, SleepAlarmReceiver::class.java),
-        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-    )
-
-    private fun scheduleBackupAlarm(at: Long) {
-        val am = getSystemService(AlarmManager::class.java) ?: return
-        try {
-            // One minute after the latest wake time, only fires if tracking stopped unexpectedly.
-            am.setAlarmClock(AlarmManager.AlarmClockInfo(at + 60_000, openAppIntent()), backupIntent())
-        } catch (e: SecurityException) {
-            ErrorLog.log("SLEEP", "Exact backup alarm not allowed", e)
-        }
-    }
-
-    private fun cancelBackupAlarm() {
-        getSystemService(AlarmManager::class.java)?.cancel(backupIntent())
     }
 
     // ---------- Notifications ----------
@@ -486,32 +486,6 @@ class SleepTrackerService : Service() {
         runCatching { getSystemService(NotificationManager::class.java).notify(NOTIF_TRACKING, trackingNotification()) }
     }
 
-    private fun alarmNotification(): Notification =
-        NotificationCompat.Builder(this, TrainingApp.CHANNEL_SLEEP_ALARM)
-            .setSmallIcon(R.drawable.ic_stat_timer)
-            .setColor(BRONZE)
-            .setContentTitle("Good morning")
-            .setContentText("Time to get up")
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setOngoing(true)
-            .setFullScreenIntent(openAppIntent(), true)
-            .setContentIntent(openAppIntent())
-            .addAction(0, "Snooze 9 min", actionIntent(ACTION_SNOOZE, 54))
-            .addAction(0, "I'm up", actionIntent(ACTION_STOP, 55))
-            .build()
-
-    private fun vibrator(): Vibrator = if (Build.VERSION.SDK_INT >= 31) {
-        getSystemService(VibratorManager::class.java).defaultVibrator
-    } else {
-        @Suppress("DEPRECATION")
-        getSystemService(VIBRATOR_SERVICE) as Vibrator
-    }
-
-    private fun vibrateRepeating() {
-        runCatching { vibrator().vibrate(VibrationEffect.createWaveform(longArrayOf(0, 600, 800), 0)) }
-    }
-
     private fun clock(millis: Long): String =
         java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneId.systemDefault()).toLocalTime()
             .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
@@ -520,7 +494,6 @@ class SleepTrackerService : Service() {
         running = false
         handler.removeCallbacksAndMessages(null)
         sensorManager?.unregisterListener(motionListener)
-        stopRinging()
         wakeLock?.let { if (it.isHeld) it.release() }
         super.onDestroy()
     }
@@ -528,30 +501,10 @@ class SleepTrackerService : Service() {
     companion object {
         const val ACTION_START = "sleep_start"
         const val ACTION_STOP = "sleep_stop"
-        const val ACTION_SNOOZE = "sleep_snooze"
+        const val ACTION_RESUME = "sleep_resume"
         const val ACTION_SET_ALARM = "sleep_set_alarm"
         private const val NOTIF_TRACKING = 11
-        private const val NOTIF_ALARM = 12
         private const val BRONZE = 0xFFA8875A.toInt()
     }
 }
 
-/** Fires only if the tracker was killed overnight: rings a plain alarm notification so you still wake up. */
-class SleepAlarmReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        if (SleepTracker.state.value != null) return
-        val open = PendingIntent.getActivity(
-            context, 56, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
-        )
-        val n = NotificationCompat.Builder(context, TrainingApp.CHANNEL_SLEEP_BACKUP)
-            .setSmallIcon(R.drawable.ic_stat_timer)
-            .setContentTitle("Good morning")
-            .setContentText("Your alarm (sleep tracking stopped overnight)")
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setFullScreenIntent(open, true)
-            .setAutoCancel(true)
-            .build()
-        runCatching { context.getSystemService(NotificationManager::class.java).notify(13, n) }
-    }
-}

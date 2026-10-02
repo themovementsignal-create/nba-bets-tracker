@@ -65,6 +65,14 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import android.annotation.SuppressLint
+import android.app.AlarmManager
+import android.media.AudioManager
+import android.os.PowerManager
+import androidx.core.app.NotificationManagerCompat
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.foundation.layout.width
+import com.muir.bear.sleep.WakeAlarm
 
 private fun nextAlarmMillis(hhmm: String): Long {
     val t = runCatching { LocalTime.parse(hhmm) }.getOrDefault(LocalTime.of(6, 30))
@@ -89,6 +97,8 @@ fun SleepScreen(nav: Nav) {
     val window = dao.settingFlow(Settings.ALARM_WINDOW).collectAsState(initial = null).value?.toIntOrNull() ?: 30
     val snoreOn = (dao.settingFlow(Settings.SNORE_ON).collectAsState(initial = null).value ?: "1") == "1"
     val alarmSound by dao.settingFlow(Settings.ALARM_SOUND).collectAsState(initial = null)
+    val ringing by WakeAlarm.ringing.collectAsState()
+    val nextAlarm by WakeAlarm.next.collectAsState()
     var showManual by remember { mutableStateOf(false) }
     var pickTime by remember { mutableStateOf(false) }
 
@@ -109,10 +119,13 @@ fun SleepScreen(nav: Nav) {
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> start(granted) }
 
     LogScaffold("Sleep", nav) {
+        if (ringing) item { RingingCard() }
         val l = live
         if (l != null) {
-            item { TrackingCard(l, onChangeAlarm = { pickTime = true }) }
+            item { TrackingCard(l, nextAlarm, onChangeAlarm = { pickTime = true }) }
         } else {
+            // A tracked night that's still open with no tracker running was interrupted.
+            sleeps.firstOrNull { it.tracked && it.wakeAt == null }?.let { open -> item { InterruptedCard(open) } }
             val rateId = justFinished
             val toRate = rateId?.let { id -> sleeps.firstOrNull { it.id == id && it.quality == null } }
             if (toRate != null) item {
@@ -158,14 +171,9 @@ fun SleepScreen(nav: Nav) {
                         }
                         Switch(checked = snoreOn, onCheckedChange = { put(Settings.SNORE_ON, if (it) "1" else "0") })
                     }
-                    if (Build.VERSION.SDK_INT >= 34 && alarmOn &&
-                        !context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
-                    ) {
-                        TextButton(onClick = {
-                            context.startActivity(
-                                Intent(AndroidSettings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:${context.packageName}"))
-                            )
-                        }) { Text("Allow the alarm to show on the lock screen ›") }
+                    if (alarmOn) {
+                        Gap(8)
+                        AlarmReliabilityCard()
                     }
                     Gap(12)
                     BigButton("🌙 Start sleep tracking", onClick = {
@@ -191,30 +199,118 @@ fun SleepScreen(nav: Nav) {
 }
 
 @Composable
-private fun TrackingCard(l: SleepTracker.Live, onChangeAlarm: () -> Unit) {
+private fun TrackingCard(l: SleepTracker.Live, nextAlarm: Long?, onChangeAlarm: () -> Unit) {
     val context = LocalContext.current
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); delay(1000) } }
     SectionCard {
-        Text(if (l.ringing) "Good morning ☀" else "Tracking your sleep 🌙", style = MaterialTheme.typography.headlineSmall)
+        Text("Tracking your sleep 🌙", style = MaterialTheme.typography.headlineSmall)
         Muted("Since ${fmtTime(l.startedAt)} · ${fmtHours((now - l.startedAt) / 60_000)}")
+        if (l.resumed) Muted("Picked back up after your phone closed Bear for a while.")
         Gap(8)
         StatLine("Alarm", l.alarmAt?.let { fmtTime(it) + if (l.windowMin > 0) " (window ${l.windowMin} min)" else "" } ?: "Off")
-        l.snoozedUntil?.let { StatLine("Snoozed until", fmtTime(it)) }
-        if (!l.ringing) TextButton(onClick = onChangeAlarm) { Text(if (l.alarmAt == null) "Set an alarm" else "Change alarm time") }
+        if (nextAlarm != null && l.alarmAt != null && nextAlarm != l.alarmAt) StatLine("Snoozed until", fmtTime(nextAlarm))
+        TextButton(onClick = onChangeAlarm) { Text(if (l.alarmAt == null) "Set an alarm" else "Change alarm time") }
         StatLine("Snore detection", when {
             !l.listening -> "Off"
             l.modelReady -> "On · ${l.snoreSec / 60} min so far"
             else -> "Loudness only"
         })
         Gap(12)
-        if (l.ringing) {
-            BigButton("I'm up", onClick = { SleepTracker.stop(context) })
-            Gap(8)
-            BigButton("Snooze 9 min", onClick = { SleepTracker.snooze(context) }, secondary = true)
-        } else {
-            BigButton("Stop · I'm awake", onClick = { SleepTracker.stop(context) })
-        }
+        BigButton("Stop · I'm awake", onClick = { SleepTracker.stop(context) })
+    }
+}
+
+/** Shown whenever the alarm is ringing, with or without tracking. */
+@Composable
+private fun RingingCard() {
+    val context = LocalContext.current
+    SectionCard {
+        Text("Good morning ☀", style = MaterialTheme.typography.headlineSmall)
+        Gap(12)
+        BigButton("I'm up", onClick = { WakeAlarm.dismiss(context) })
+        Gap(8)
+        BigButton("Snooze ${WakeAlarm.SNOOZE_MIN} min", onClick = { WakeAlarm.snooze(context) }, secondary = true)
+    }
+}
+
+/** A tracked night that stopped early: say so plainly, and offer to resume or end it. */
+@Composable
+private fun InterruptedCard(open: Sleep) {
+    val context = LocalContext.current
+    val samples by Graph.dao.sleepSamplesFlow(open.id).collectAsState(initial = emptyList())
+    val last = samples.maxOfOrNull { it.at }
+    SectionCard("Tracking stopped") {
+        Text(
+            "Bear stopped recording at ${fmtTime(last?.plus(60_000) ?: open.bedAt)}" +
+                (open.alarmAt?.let { ". Your ${fmtTime(it)} alarm is still set with Android." } ?: "."),
+        )
+        Muted("Usually the phone's battery saver closing apps overnight. The checks under Smart alarm help stop it happening again.")
+        Gap(8)
+        BigButton("Resume tracking", onClick = { SleepTracker.resume(context) })
+        Gap(8)
+        BigButton("End the night", onClick = {
+            Graph.scope.launch {
+                SleepTracker.closeNight(open.id, (last ?: open.bedAt) + 60_000)
+                SleepTracker.saveSession(context, null)
+                SleepTracker.justFinished.value = open.id
+            }
+        }, secondary = true)
+    }
+}
+
+/**
+ * The things that can stop an alarm on a real phone, each checked live, with a fix button,
+ * plus a real end-to-end test alarm.
+ */
+@Composable
+private fun AlarmReliabilityCard() {
+    val context = LocalContext.current
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { delay(1500); tick++ } }
+    val nextAlarm by WakeAlarm.next.collectAsState()
+    @Suppress("UNUSED_VARIABLE") val refresh = tick // re-check while the screen is open
+    val pm = context.getSystemService(PowerManager::class.java)
+    val unrestricted = pm?.isIgnoringBatteryOptimizations(context.packageName) == true
+    val notifications = NotificationManagerCompat.from(context).areNotificationsEnabled()
+    val exact = Build.VERSION.SDK_INT < 31 || context.getSystemService(AlarmManager::class.java)?.canScheduleExactAlarms() == true
+    val fullScreen = Build.VERSION.SDK_INT < 34 || context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
+    val audio = context.getSystemService(AudioManager::class.java)
+    val alarmVolume = audio?.let { it.getStreamVolume(AudioManager.STREAM_ALARM) * 100 / it.getStreamMaxVolume(AudioManager.STREAM_ALARM).coerceAtLeast(1) } ?: 100
+
+    fun open(intent: Intent) = runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    val pkg = Uri.parse("package:${context.packageName}")
+
+    Text("Alarm checks", style = MaterialTheme.typography.titleSmall)
+    CheckRow(unrestricted, "Battery: Bear allowed to run overnight", "Allow") {
+        @SuppressLint("BatteryLife")
+        val i = Intent(AndroidSettings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, pkg)
+        open(i)
+    }
+    CheckRow(notifications, "Notifications on", "Turn on") {
+        open(Intent(AndroidSettings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(AndroidSettings.EXTRA_APP_PACKAGE, context.packageName))
+    }
+    CheckRow(exact, "Alarms allowed", "Allow") {
+        if (Build.VERSION.SDK_INT >= 31) open(Intent(AndroidSettings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, pkg))
+    }
+    CheckRow(fullScreen, "Alarm can show on the lock screen", "Allow") {
+        if (Build.VERSION.SDK_INT >= 34) open(Intent(AndroidSettings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, pkg))
+    }
+    CheckRow(alarmVolume >= 30, if (alarmVolume >= 30) "Alarm volume $alarmVolume%" else "Alarm volume is low ($alarmVolume%): Bear raises it to 60% while ringing", null) {}
+    Gap(4)
+    TextButton(onClick = { open(Intent(Intent.ACTION_VIEW, Uri.parse("https://dontkillmyapp.com"))) }) { Text("Phone-specific battery tips ›") }
+    val testAt = nextAlarm?.takeIf { WakeAlarm.isTest(context) }
+    OutlinedButton(onClick = { WakeAlarm.schedule(context, System.currentTimeMillis() + 60_000L, test = true) }, Modifier.fillMaxWidth().testTag("testAlarm")) {
+        Text(if (testAt != null) "Test alarm set for ${fmtTime(testAt)}: lock your phone" else "Test the alarm (rings in 1 minute)")
+    }
+}
+
+@Composable
+private fun CheckRow(ok: Boolean, label: String, fixLabel: String?, onFix: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(if (ok) "✓" else "!", Modifier.width(22.dp), color = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        if (!ok && fixLabel != null) TextButton(onClick = onFix) { Text(fixLabel) }
     }
 }
 

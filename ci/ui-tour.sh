@@ -14,7 +14,7 @@ adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 
 
 run_tests() {
   adb shell am instrument -w -r \
-    -e class "$PKG.MigrationTest,$PKG.UiTourTest" \
+    -e class "$PKG.MigrationTest,$PKG.WakeAlarmTest,$PKG.UiTourTest" \
     "$PKG.test/androidx.test.runner.AndroidJUnitRunner" | tee instrument.txt
 }
 run_tests
