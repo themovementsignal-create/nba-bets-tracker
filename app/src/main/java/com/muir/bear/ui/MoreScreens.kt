@@ -75,7 +75,7 @@ fun MoreScreen(nav: Nav) {
                 nav,
             )
         }
-        item { MenuGroup("App", listOf("Targets & settings" to Screen.Settings, "Backup, export & import" to Screen.Data, "Error log" to Screen.Errors, "About" to Screen.About), nav) }
+        item { MenuGroup("App", listOf("Edit Today" to Screen.EditToday, "Targets & settings" to Screen.Settings, "Backup, export & import" to Screen.Data, "Error log" to Screen.Errors, "About" to Screen.About), nav) }
         item { Muted("Build ${BuildConfig.VERSION_CODE} · v${BuildConfig.VERSION_NAME}", Modifier.padding(8.dp)) }
     }
 }

@@ -57,6 +57,7 @@ fun InsightsScreen(nav: Nav) {
     val activities by dao.activities().collectAsState(initial = emptyList())
     val sleeps by dao.sleeps().collectAsState(initial = emptyList())
     val sleepNeed = Calc.parseNumber(dao.settingFlow(Settings.SLEEP_NEED).collectAsState(initial = null).value) ?: 8.0
+    val hrv by dao.hrvReadings().collectAsState(initial = emptyList())
     var data by remember { mutableStateOf<InsightData?>(null) }
     LaunchedEffect(Unit) {
         data = InsightData(dao.allSets(), dao.allExercises().associateBy { it.id }, dao.allWorkouts().associateBy { it.id })
@@ -157,6 +158,70 @@ fun InsightsScreen(nav: Nav) {
                     s14?.wakeSpreadMin?.let { StatLine("Wake time varies by", "± ${it.roundToInt()} min") }
                     Gap(4)
                     Muted("Debt = hours short of your need, summed over the week. Regular bed and wake times (within about ±30 min) support recovery as much as total hours. Set your need in Targets & settings.")
+                }
+            }
+        }
+
+        // ---------- Last 14 nights ----------
+        item {
+            SectionCard("Last 14 nights") {
+                val zone = ZoneId.systemDefault()
+                val days = (13 downTo 0).map { today - it }
+                val byDay = days.map { d ->
+                    sleeps.filter { it.wakeAt != null && it.wakeAt - it.bedAt >= 3_600_000L && it.wakeAt.toLocalDate().toEpochDay() == d }
+                        .maxByOrNull { it.wakeAt!! - it.bedAt }
+                }
+                if (byDay.all { it == null }) {
+                    Muted("Track or log a few nights to see this.")
+                } else {
+                    // Hours slept against your need (the dashed line).
+                    LineChart(
+                        listOf(days.indices.mapNotNull { i -> byDay[i]?.let { s -> i.toFloat() to ((s.wakeAt!! - s.bedAt) / 3_600_000f) } }),
+                        listOf(MaterialTheme.colorScheme.primary),
+                        targetY = sleepNeed.toFloat(),
+                    )
+                    Muted("Hours asleep each night; the line is your ${Calc.fmt(sleepNeed)} h need.")
+                    Gap(8)
+                    // Bedtimes as hours after 6 pm, so 23:00 and 00:30 sit close together.
+                    val beds = days.indices.mapNotNull { i ->
+                        byDay[i]?.let { s ->
+                            val t = java.time.Instant.ofEpochMilli(s.bedAt).atZone(zone).toLocalTime()
+                            i.toFloat() to (((t.hour * 60 + t.minute) - 18 * 60 + 1440) % 1440) / 60f
+                        }
+                    }
+                    if (beds.size >= 3) {
+                        LineChart(listOf(beds), listOf(MaterialTheme.colorScheme.tertiary))
+                        val mean = beds.map { it.second }.average()
+                        val h = ((mean + 18) % 24).toInt()
+                        val m = ((mean % 1) * 60).roundToInt()
+                        Muted("Bedtimes (higher = later); average about %02d:%02d. Steadier is better.".format(h, m.coerceAtMost(59)))
+                    }
+                }
+            }
+        }
+
+        // ---------- HRV and resting heart rate ----------
+        item {
+            SectionCard("HRV and resting heart rate") {
+                val recent = hrv.filter { it.at >= System.currentTimeMillis() - 60 * 86_400_000L }.sortedBy { it.at }
+                if (recent.size < 2) {
+                    Muted("Measure a few mornings in More → Morning HRV to see your trend.")
+                } else {
+                    val days = recent.map { (it.at / 86_400_000.0).toFloat() }
+                    val values = recent.map { it.rmssdMs }
+                    val base = values.dropLast(1).takeLast(30)
+                    val mean = base.average()
+                    val sd = if (base.size > 1) kotlin.math.sqrt(base.sumOf { (it - mean) * (it - mean) } / (base.size - 1)) else 0.0
+                    Text("HRV (RMSSD, ms)", style = MaterialTheme.typography.labelLarge)
+                    LineChart(listOf(days.indices.map { days[it] to values[it].toFloat() }), listOf(MaterialTheme.colorScheme.primary), targetY = mean.toFloat())
+                    Muted(
+                        "Latest ${values.last().roundToInt()} ms · your normal ${(mean - sd).roundToInt()}–${(mean + sd).roundToInt()} ms (line = average)." +
+                            if (base.size < 5) " A few more mornings make this more reliable." else "",
+                    )
+                    Gap(8)
+                    Text("Resting heart rate (bpm)", style = MaterialTheme.typography.labelLarge)
+                    LineChart(listOf(days.indices.map { days[it] to recent[it].heartRate.toFloat() }), listOf(MaterialTheme.colorScheme.tertiary))
+                    Muted("HRV drifting down and resting heart rate drifting up over several days usually means you need more recovery.")
                 }
             }
         }

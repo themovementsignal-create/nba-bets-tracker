@@ -305,6 +305,16 @@ class UiTourTest {
         shot("home-filled-load")
         scrollTo("Sleep vs performance")
         shot("home-filled-bottom")
+        // Edit Today: switch a card off and see it gone.
+        scrollTo("Edit Today")
+        tap("Edit Today")
+        waitFor("Chips to show:")
+        shot("edit-today")
+        compose.onNodeWithTag("show-gear").performClick()
+        compose.waitForIdle()
+        back()
+        waitFor("Next session")
+        shot("home-edited")
 
         // ---- Travel mode: hotel gym swaps exercises automatically ----
         tab("Train")

@@ -46,6 +46,11 @@ object Settings {
     const val ALARM_SOUND = "alarm_sound"
     /** Hours of sleep you need, for sleep debt. */
     const val SLEEP_NEED = "sleep_need"
+    /** Today layout: order and on/off of cards (see domain/Dashboard). */
+    const val DASH_LAYOUT = "dash_layout"
+    const val DASH_TICKS = "dash_ticks"
+    /** Exercise ids for the Key lifts chart; empty = your two most-trained. */
+    const val DASH_LIFTS = "dash_lifts"
     /** Epoch day the current training block (program) started; unset = first workout. */
     const val PROGRAM_START = "program_start"
     const val PROGRAM_REVIEW_WEEKS = "program_review_weeks"

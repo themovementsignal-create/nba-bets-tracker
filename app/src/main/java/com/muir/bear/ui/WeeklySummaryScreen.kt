@@ -29,6 +29,7 @@ import com.muir.bear.data.Settings
 import com.muir.bear.data.Workout
 import com.muir.bear.data.WorkoutSet
 import com.muir.bear.domain.Calc
+import com.muir.bear.domain.Dashboard
 import com.muir.bear.domain.Insights
 import com.muir.bear.domain.Muscles
 import com.muir.bear.domain.Rpe
@@ -52,6 +53,7 @@ fun WeeklySummaryScreen(nav: Nav) {
     val steps by dao.dailySteps().collectAsState(initial = emptyList())
     val niggles by dao.niggles().collectAsState(initial = emptyList())
     val hrv by dao.hrvReadings().collectAsState(initial = emptyList())
+    val ticks = Dashboard.parseTicks(dao.settingFlow(Settings.DASH_TICKS).collectAsState(initial = null).value)
     val proteinMin = dao.settingFlow(Settings.PROTEIN_MIN).collectAsState(initial = null).value?.toIntOrNull() ?: 160
     val sleepNeed = Calc.parseNumber(dao.settingFlow(Settings.SLEEP_NEED).collectAsState(initial = null).value) ?: 8.0
     var weeksBack by remember { mutableIntStateOf(0) }
@@ -144,7 +146,7 @@ fun WeeklySummaryScreen(nav: Nav) {
                 (if (bwPrev.isNotEmpty()) " (%+.1f kg).".format(bw.map { it.kg }.average() - bwPrev.map { it.kg }.average()) else "."))
             val days = (from..to)
             val proteinDays = days.count { d -> proteins.filter { it.day == d }.sumOf { it.grams } >= proteinMin }
-            add("Protein target hit $proteinDays of ${days.count()} days.")
+            if (Dashboard.Tick.PROTEIN in ticks) add("Protein target hit $proteinDays of ${days.count()} days.")
             val stepsWeek = steps.filter { inWeek(it.day) }
             if (stepsWeek.isNotEmpty()) add("%,d steps a day on average.".format(stepsWeek.sumOf { it.steps } / stepsWeek.size))
             val sauna = saunas.filter { inWeek(it.at.toLocalDate().toEpochDay()) }
