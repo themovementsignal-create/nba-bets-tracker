@@ -1,0 +1,23 @@
+=== 2026-10-03 03:26:31 [ALARM] build 1
+Alarm sound failed: content://settings/system/alarm_alert
+java.io.IOException: setDataSource failed.: status=0x80000000
+	at android.media.MediaPlayer.nativeSetDataSource(Native Method)
+	at android.media.MediaPlayer.setDataSource(MediaPlayer.java:1226)
+	at android.media.MediaPlayer.setDataSource(MediaPlayer.java:1213)
+	at android.media.MediaPlayer.setDataSource(MediaPlayer.java:1117)
+	at android.media.MediaPlayer.setDataSource(MediaPlayer.java:1049)
+	at com.muir.bear.sleep.AlarmRingService.startSound$play(WakeAlarm.kt:254)
+	at com.muir.bear.sleep.AlarmRingService.startSound(WakeAlarm.kt:275)
+	at com.muir.bear.sleep.AlarmRingService.ring(WakeAlarm.kt:224)
+	at com.muir.bear.sleep.AlarmRingService.onStartCommand(WakeAlarm.kt:191)
+	at android.app.ActivityThread.handleServiceArgs(ActivityThread.java:4821)
+	at android.app.ActivityThread.-$$Nest$mhandleServiceArgs(Unknown Source:0)
+	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2289)
+	at android.os.Handler.dispatchMessage(Handler.java:106)
+	at android.os.Looper.loopOnce(Looper.java:205)
+	at android.os.Looper.loop(Looper.java:294)
+	at android.app.ActivityThread.main(ActivityThread.java:8177)
+	at java.lang.reflect.Method.invoke(Native Method)
+	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:552)
+	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:971)
+
