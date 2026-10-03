@@ -289,7 +289,7 @@ fun HomeScreen(nav: Nav) {
                     SectionCard("This week") {
                         StatLine("Sauna", "${saunas.filter { it.at.toLocalDate().toEpochDay() >= weekStart }.sumOf { it.rounds * it.minutesPerRound }} min")
                         val neatWeek = neat.filter { it.startedAt.toLocalDate().toEpochDay() >= weekStart }
-                        StatLine("NEAT", "${neatWeek.size} sessions · ${neatWeek.sumOf { it.durationMin }} min")
+                        StatLine("NEAT", "${neatWeek.size} ${if (neatWeek.size == 1) "session" else "sessions"} · ${neatWeek.sumOf { it.durationMin }} min")
                         if (Dashboard.Tick.PROTEIN in ticks) StatLine("Protein target hit", "$proteinHitDays of last 7 days")
                         val weekSteps = steps.filter { it.day >= weekStart }.sumOf { it.steps }
                         StatLine("Steps", "%,d (avg %,d/day)".format(weekSteps, weekSteps / (today() - weekStart + 1).toInt()))
