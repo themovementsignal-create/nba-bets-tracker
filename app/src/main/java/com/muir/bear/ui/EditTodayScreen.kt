@@ -18,6 +18,7 @@ import com.muir.bear.data.ExerciseType
 import com.muir.bear.data.Setting
 import com.muir.bear.data.Settings
 import com.muir.bear.domain.Dashboard
+import kotlinx.coroutines.launch
 
 /** Choose what Today shows and in what order. Hidden things stay in More; nothing is deleted. */
 @Composable
@@ -29,7 +30,9 @@ fun EditTodayScreen(nav: Nav) {
     val exercises by dao.exercises().collectAsState(initial = emptyList())
     val picked = liftsSetting?.split(',')?.mapNotNull { it.trim().toLongOrNull() }.orEmpty()
 
-    fun save(key: String, value: String) = Graph.scope.launchSave(key, value)
+    fun save(key: String, value: String) {
+        Graph.scope.launch { dao.putSetting(Setting(key, value)) }
+    }
 
     LogScaffold("Edit Today", nav) {
         item { Muted("Switch things on or off and move them up or down. Hidden items are still in More, and nothing you've logged is lost.") }
@@ -83,6 +86,3 @@ fun EditTodayScreen(nav: Nav) {
         }
     }
 }
-
-private fun kotlinx.coroutines.CoroutineScope.launchSave(key: String, value: String) =
-    kotlinx.coroutines.launch { Graph.dao.putSetting(Setting(key, value)) }
