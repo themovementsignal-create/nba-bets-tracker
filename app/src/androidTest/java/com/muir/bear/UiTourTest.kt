@@ -310,6 +310,7 @@ class UiTourTest {
         tap("Edit Today")
         waitFor("Chips to show:")
         shot("edit-today")
+        scrollTo("Gear")
         compose.onNodeWithTag("show-gear").performClick()
         compose.waitForIdle()
         back()

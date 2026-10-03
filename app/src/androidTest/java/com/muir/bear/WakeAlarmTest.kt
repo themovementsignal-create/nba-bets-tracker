@@ -36,7 +36,12 @@ class WakeAlarmTest {
 
     @After
     fun tidy() {
-        WakeAlarm.dismiss(context)
+        // Silence anything still ringing and wait for it, so nothing from this test can reach
+        // into the next one; then clear any pending alarm directly.
+        if (WakeAlarm.ringing.value) {
+            WakeAlarm.dismiss(context)
+            waitUntil(10_000, "alarm to stop") { !WakeAlarm.ringing.value }
+        }
         WakeAlarm.cancel(context)
     }
 
