@@ -20,6 +20,7 @@ import com.muir.bear.data.migrateDataV2
 import com.muir.bear.data.seedIfNeeded
 import com.muir.bear.steps.Steps
 import com.muir.bear.io.DataIO
+import com.muir.bear.reminders.SupplementReminders
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -70,6 +71,7 @@ class TrainingApp : Application() {
             DataIO.autoBackupIfDue(this@TrainingApp)
         }
         Steps.scheduleNightly(this)
+        Graph.scope.launch { SupplementReminders.reschedule(this@TrainingApp) }
     }
 
     private fun createChannels() {
@@ -93,6 +95,9 @@ class TrainingApp : Application() {
                 enableVibration(false)
             }
         )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_SUPPS, "Supplement reminders", NotificationManager.IMPORTANCE_HIGH)
+        )
         // Only used if sleep tracking died overnight: this one makes the alarm sound itself.
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_SLEEP_BACKUP, "Wake-up alarm (backup)", NotificationManager.IMPORTANCE_HIGH).apply {
@@ -109,5 +114,6 @@ class TrainingApp : Application() {
         const val CHANNEL_SLEEP = "sleep_tracking"
         const val CHANNEL_SLEEP_ALARM = "sleep_alarm"
         const val CHANNEL_SLEEP_BACKUP = "sleep_alarm_backup"
+        const val CHANNEL_SUPPS = "supplement_reminders"
     }
 }

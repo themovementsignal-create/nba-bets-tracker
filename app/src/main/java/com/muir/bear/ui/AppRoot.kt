@@ -127,6 +127,10 @@ fun AppRoot() {
                 if (nav.stack.lastOrNull() != Screen.Sleep) nav.go(Screen.Sleep)
                 MainActivity.openRequest.value = null
             }
+            "supplements" -> {
+                MainActivity.openRequest.value = null
+                if (nav.stack.lastOrNull() != Screen.Supplements) nav.go(Screen.Supplements)
+            }
             // Just turned the alarm off: your morning check-ins (unless switched off).
             "morning" -> {
                 MainActivity.openRequest.value = null

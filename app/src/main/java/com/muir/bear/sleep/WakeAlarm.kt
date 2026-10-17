@@ -32,6 +32,7 @@ import com.muir.bear.TrainingApp
 import com.muir.bear.data.Settings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -173,6 +174,13 @@ class SleepAlarmReceiver : BroadcastReceiver() {
 class AlarmBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         WakeAlarm.restore(context)
+        // Clock or time-zone change: move supplement reminders too (needs the unlocked database).
+        if (WakeAlarm.isUnlocked(context)) {
+            val pending = goAsync()
+            Graph.scope.launch {
+                try { com.muir.bear.reminders.SupplementReminders.reschedule(context.applicationContext) } finally { pending.finish() }
+            }
+        }
     }
 }
 

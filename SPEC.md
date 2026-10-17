@@ -47,6 +47,7 @@ Kotlin, Jetpack Compose, Material 3, Room (SQLite), Health Connect (Phase 3). Mi
 - [x] Bodyweight log with 7-day average; target 98 kg
 - [x] Protein quick tally with presets; target 160–175 g/day
 - [x] Daily supplement checklist (editable list)
+- [ ] Supplement reminders: a daily time per supplement and a one-off "remind me in…" timer; the notification lists what's left, with Taken and In 30 min buttons
 
 ## Phase 3: Data and dashboard
 - [ ] Health Connect: read steps (and sleep if available) — deferred; using the phone pedometer instead

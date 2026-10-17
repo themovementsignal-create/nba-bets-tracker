@@ -96,6 +96,10 @@
             android:name=".steps.StepsAlarmReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".reminders.SupplementReminderReceiver"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.files"

@@ -75,6 +75,9 @@ import com.muir.bear.data.Sleep
 import com.muir.bear.data.Supplement
 import com.muir.bear.data.SupplementLog
 import com.muir.bear.domain.Calc
+import com.muir.bear.domain.SuppReminders
+import com.muir.bear.reminders.SupplementReminders
+import androidx.core.app.NotificationManagerCompat
 import com.muir.bear.steps.Steps
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -636,11 +639,33 @@ fun SupplementsScreen(nav: Nav) {
     val dao = Graph.dao
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
+    val context = LocalContext.current
     val supplements by dao.supplements().collectAsState(initial = emptyList())
     val log by dao.supplementLog(today()).collectAsState(initial = emptyList())
+    val remindersSaved by dao.settingFlow(Settings.SUPP_REMINDERS).collectAsState(initial = null)
+    val onceSaved by dao.settingFlow(Settings.SUPP_REMIND_ONCE).collectAsState(initial = null)
+    val reminders = SuppReminders.parse(remindersSaved)
+    val once = onceSaved?.toLongOrNull()?.takeIf { it > System.currentTimeMillis() }
     val taken = log.map { it.supplementId }.toSet()
     var edit by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
+    var pickFor by remember { mutableStateOf<Supplement?>(null) }
+
+    fun saveReminder(id: Long, minute: Int?) {
+        Graph.scope.launch {
+            dao.putSetting(Setting(Settings.SUPP_REMINDERS, SuppReminders.serialize(SuppReminders.set(reminders, id, minute))))
+            SupplementReminders.reschedule(context)
+        }
+    }
+
+    pickFor?.let { s ->
+        ReminderTimeDialog(
+            name = s.name,
+            current = SuppReminders.timeOf(reminders, s.id),
+            onDismiss = { pickFor = null },
+            onPick = { minute -> pickFor = null; saveReminder(s.id, minute) },
+        )
+    }
 
     LogScaffold("Supplements", nav) {
         item { Muted("Today: ${taken.size} of ${supplements.size} taken") }
@@ -655,6 +680,35 @@ fun SupplementsScreen(nav: Nav) {
                     Checkbox(checked = s.id in taken, onCheckedChange = null)
                     Text(s.name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                     if (edit) DangerTextButton("Remove") { scope.launch { dao.updateSupplement(s.copy(active = false)) } }
+                    else TextButton(onClick = { pickFor = s }) {
+                        Text(SuppReminders.timeOf(reminders, s.id)?.let { "⏰ " + SuppReminders.fmt(it) } ?: "Remind")
+                    }
+                }
+            }
+        }
+        item {
+            SectionCard("Remind me later") {
+                if (once != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Reminder at ${fmtTime(once)}", Modifier.weight(1f), color = MaterialTheme.colorScheme.primary)
+                        TextButton(onClick = { Graph.scope.launch { SupplementReminders.remindIn(context, null) } }) { Text("Cancel") }
+                    }
+                    Gap(4)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(15 to "15 min", 30 to "30 min", 60 to "1 h", 120 to "2 h").forEach { (min, label) ->
+                        OutlinedButton(
+                            onClick = { Graph.scope.launch { SupplementReminders.remindIn(context, min) } },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 4.dp),
+                        ) { Text(label, maxLines = 1) }
+                    }
+                }
+                Gap(4)
+                Muted("Tap Remind next to a supplement for a daily reminder. Reminders only list what you haven't ticked yet.")
+                if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+                    Gap(4)
+                    Text("Notifications are off for Bear, so reminders can't show. Turn them on in the phone's Settings › Apps › Bear.", color = MaterialTheme.colorScheme.error)
                 }
             }
         }
@@ -672,4 +726,23 @@ fun SupplementsScreen(nav: Nav) {
             }
         }
     }
+}
+
+/** Daily reminder time for one supplement, or none. */
+@Composable
+private fun ReminderTimeDialog(name: String, current: Int?, onDismiss: () -> Unit, onPick: (Int?) -> Unit) {
+    val start = current ?: 8 * 60
+    val state = androidx.compose.material3.rememberTimePickerState(initialHour = start / 60, initialMinute = start % 60, is24Hour = true)
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Remind me about $name") },
+        text = { androidx.compose.material3.TimePicker(state = state) },
+        confirmButton = { TextButton(onClick = { onPick(state.hour * 60 + state.minute) }) { Text("Every day") } },
+        dismissButton = {
+            Row {
+                if (current != null) TextButton(onClick = { onPick(null) }) { Text("No reminder") }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+    )
 }

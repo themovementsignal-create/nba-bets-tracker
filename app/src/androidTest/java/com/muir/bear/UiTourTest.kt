@@ -258,6 +258,17 @@ class UiTourTest {
             tap("Creatine")
             waitFor("Today: 1 of 4 taken")
             shot("supplements-ticked")
+            // Daily reminder for the first supplement, then a one-off "in 15 min".
+            compose.onAllNodesWithText("Remind").onFirst().performClick()
+            compose.waitForIdle()
+            shot("supplement-reminder-time")
+            tapInDialog("Every day")
+            waitFor("⏰ 08:00")
+            scrollTo("15 min")
+            tap("15 min")
+            compose.waitUntil(15_000) { compose.onAllNodesWithText("Reminder at", substring = true).fetchSemanticsNodes().isNotEmpty() }
+            shot("supplement-reminders")
+            tap("Cancel") // don't let it pop up over later screenshots
         }
         // What "I'm up" on the alarm opens: the morning check-ins on one screen.
         MainActivity.openRequest.value = "morning"

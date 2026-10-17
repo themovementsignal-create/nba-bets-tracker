@@ -51,7 +51,7 @@ class MainActivity : ComponentActivity() {
             WakeAlarm.dismiss(this)
         }
         when (val open = intent?.getStringExtra(EXTRA_OPEN)) {
-            "sleep", "morning" -> openRequest.value = open
+            "sleep", "morning", "supplements" -> openRequest.value = open
         }
         intent?.removeExtra(EXTRA_OPEN)
     }
