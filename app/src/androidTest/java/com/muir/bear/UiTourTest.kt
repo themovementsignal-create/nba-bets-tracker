@@ -238,7 +238,11 @@ class UiTourTest {
             compose.waitForIdle()
             shot("sleep-rated")
         }
-        openFromMore("Morning HRV", "hrv")
+        openFromMore("Morning HRV", "hrv") {
+            tap("Tips")
+            waitFor("Hide tips")
+            shot("hrv-tips")
+        }
         openFromMore("Bodyweight", "bodyweight") {
             compose.onAllNodes(hasSetTextAction())[0].performTextInput("99.2")
             tap("Save")
@@ -255,6 +259,13 @@ class UiTourTest {
             waitFor("Today: 1 of 4 taken")
             shot("supplements-ticked")
         }
+        // What "I'm up" on the alarm opens: the morning check-ins on one screen.
+        MainActivity.openRequest.value = "morning"
+        waitFor("Morning HRV")
+        shot("morning")
+        scrollTo("Done")
+        shot("morning-bottom")
+        tap("Done")
         openFromMore("Sauna", "sauna") {
             tap("Save 45 min session")
             waitFor("Saved ✓")

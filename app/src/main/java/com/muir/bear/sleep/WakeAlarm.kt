@@ -345,6 +345,19 @@ class AlarmRingService : Service() {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
+    /** "I'm up" opens Bear, which turns the alarm off and shows your morning check-ins. */
+    private fun upIntent(): PendingIntent {
+        // Before the first unlock after a reboot Bear can't open yet: just turn the alarm off.
+        if (!WakeAlarm.isUnlocked(this)) return actionIntent(ACTION_DISMISS, 65)
+        return PendingIntent.getActivity(
+            this, 67,
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(MainActivity.EXTRA_DISMISS_ALARM, true)
+                .putExtra(MainActivity.EXTRA_OPEN, "morning"),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+    }
+
     private fun ringNotification(): Notification {
         val open = PendingIntent.getActivity(
             this, 63,
@@ -363,7 +376,7 @@ class AlarmRingService : Service() {
             .setFullScreenIntent(open, true)
             .setContentIntent(open)
             .addAction(0, "Snooze ${WakeAlarm.SNOOZE_MIN} min", actionIntent(ACTION_SNOOZE, 64))
-            .addAction(0, "I'm up", actionIntent(ACTION_DISMISS, 65))
+            .addAction(0, "I'm up", upIntent())
             .build()
     }
 

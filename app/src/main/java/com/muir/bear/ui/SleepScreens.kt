@@ -53,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.muir.bear.Graph
+import com.muir.bear.MainActivity
 import com.muir.bear.data.Setting
 import com.muir.bear.data.Settings
 import com.muir.bear.data.Sleep
@@ -96,6 +97,7 @@ fun SleepScreen(nav: Nav) {
     val alarmOn = (dao.settingFlow(Settings.ALARM_ON).collectAsState(initial = null).value ?: "1") == "1"
     val window = dao.settingFlow(Settings.ALARM_WINDOW).collectAsState(initial = null).value?.toIntOrNull() ?: 30
     val snoreOn = (dao.settingFlow(Settings.SNORE_ON).collectAsState(initial = null).value ?: "1") == "1"
+    val morningOn = (dao.settingFlow(Settings.MORNING_AFTER_ALARM).collectAsState(initial = null).value ?: "1") == "1"
     val alarmSound by dao.settingFlow(Settings.ALARM_SOUND).collectAsState(initial = null)
     val ringing by WakeAlarm.ringing.collectAsState()
     val nextAlarm by WakeAlarm.next.collectAsState()
@@ -162,6 +164,14 @@ fun SleepScreen(nav: Nav) {
                         }
                         Gap(8)
                         AlarmSoundRow(alarmSound) { put(Settings.ALARM_SOUND, it) }
+                        Gap(8)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Morning check-ins")
+                                Muted("When you turn the alarm off, open check-in, bodyweight, supplements and HRV on one screen.")
+                            }
+                            Switch(checked = morningOn, onCheckedChange = { put(Settings.MORNING_AFTER_ALARM, if (it) "1" else "0") })
+                        }
                     }
                     Gap(8)
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -228,7 +238,10 @@ private fun RingingCard() {
     SectionCard {
         Text("Good morning ☀", style = MaterialTheme.typography.headlineSmall)
         Gap(12)
-        BigButton("I'm up", onClick = { WakeAlarm.dismiss(context) })
+        BigButton("I'm up", onClick = {
+            WakeAlarm.dismiss(context)
+            MainActivity.openRequest.value = "morning"
+        })
         Gap(8)
         BigButton("Snooze ${WakeAlarm.SNOOZE_MIN} min", onClick = { WakeAlarm.snooze(context) }, secondary = true)
     }

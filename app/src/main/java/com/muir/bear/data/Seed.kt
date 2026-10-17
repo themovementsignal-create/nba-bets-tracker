@@ -51,6 +51,8 @@ object Settings {
     const val DASH_TICKS = "dash_ticks"
     /** Exercise ids for the Key lifts chart; empty = your two most-trained. */
     const val DASH_LIFTS = "dash_lifts"
+    /** "1" (default): turning the alarm off opens the morning check-ins. */
+    const val MORNING_AFTER_ALARM = "morning_after_alarm"
     /** Epoch day the current training block (program) started; unset = first workout. */
     const val PROGRAM_START = "program_start"
     const val PROGRAM_REVIEW_WEEKS = "program_review_weeks"

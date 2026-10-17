@@ -40,6 +40,7 @@ Kotlin, Jetpack Compose, Material 3, Room (SQLite), Health Connect (Phase 3). Mi
 - [x] Sleep: tap at bed and wake, rate quality 1–5
 - [ ] Sleep tracking like Sleep Cycle: phone on the mattress, movement-based sleep stages, on-device YAMNet snore detection, smart alarm in a wake window, nightly score
 - [x] Bulletproof wake-up alarm: held by Android itself (rings even if tracking is closed), louder fallbacks, tracking resumes after being closed, alarm checks + test alarm
+- [ ] Morning screen after the alarm: "I'm up" opens check-in, bodyweight, supplements and HRV on one screen (can be switched off on the Sleep screen)
 - [ ] Pedometer: daily steps from the phone's step counter
 - [x] Morning check-in: sleep, soreness, energy (1–5 each)
 - [x] Niggle log: tap a body map region and side, severity 0–10, notes

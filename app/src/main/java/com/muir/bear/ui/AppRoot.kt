@@ -13,7 +13,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import com.muir.bear.Graph
 import com.muir.bear.MainActivity
+import com.muir.bear.data.Settings
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -60,6 +62,7 @@ sealed interface Screen {
     data object Weekly : Screen
     data object EditToday : Screen
     data object JumpTest : Screen
+    data object Morning : Screen
 }
 
 enum class Tab(val label: String) { HOME("Today"), TRAIN("Train"), HISTORY("History"), MORE("More") }
@@ -107,6 +110,8 @@ class Nav {
     fun back() { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }
     /** Replace the current screen (e.g. workout → its summary). */
     fun replace(s: Screen) { back(); go(s) }
+    /** Back to the tabs. */
+    fun home() { stack.clear() }
 }
 
 @Composable
@@ -114,12 +119,22 @@ fun AppRoot() {
     val nav = remember { Nav() }
     var tabIndex by rememberSaveable { mutableStateOf(0) }
 
-    // Opened from the wake-up alarm notification: jump to the sleep screen.
+    // Opened from the wake-up alarm: the sleep screen while ringing, the morning screen once you're up.
     val openRequest by MainActivity.openRequest.collectAsState()
     LaunchedEffect(openRequest) {
-        if (openRequest == "sleep") {
-            if (nav.stack.lastOrNull() != Screen.Sleep) nav.go(Screen.Sleep)
-            MainActivity.openRequest.value = null
+        when (openRequest) {
+            "sleep" -> {
+                if (nav.stack.lastOrNull() != Screen.Sleep) nav.go(Screen.Sleep)
+                MainActivity.openRequest.value = null
+            }
+            // Just turned the alarm off: your morning check-ins (unless switched off).
+            "morning" -> {
+                MainActivity.openRequest.value = null
+                if ((Graph.dao.setting(Settings.MORNING_AFTER_ALARM) ?: "1") == "1") {
+                    nav.home()
+                    nav.go(Screen.Morning)
+                }
+            }
         }
     }
 
@@ -186,5 +201,6 @@ private fun ScreenContent(s: Screen, nav: Nav) {
         Screen.Weekly -> WeeklySummaryScreen(nav)
         Screen.EditToday -> EditTodayScreen(nav)
         Screen.JumpTest -> JumpTestScreen(nav)
+        Screen.Morning -> MorningScreen(nav)
     }
 }
