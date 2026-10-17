@@ -328,7 +328,7 @@ class UiTourTest {
         shot("home-filled-load")
         scrollTo("Sleep vs performance")
         shot("home-filled-bottom")
-        // Edit Today: switch a card off and see it gone.
+        // Edit Today: switch the (hidden by default) Gear tile on.
         scrollTo("Edit Today")
         tap("Edit Today")
         waitFor("Chips to show:")

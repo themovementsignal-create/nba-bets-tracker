@@ -143,6 +143,8 @@ fun AppRoot() {
     }
 
     val top = nav.stack.lastOrNull()
+    // Cards rise in only when a screen or tab first opens.
+    LaunchedEffect(top, tabIndex) { Motion.screenOpened() }
     if (top != null) {
         BackHandler { nav.back() }
         ScreenContent(top, nav)

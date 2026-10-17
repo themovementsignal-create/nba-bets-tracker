@@ -628,7 +628,15 @@ private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: Wor
  * the Compose test clock can't handle (issuetracker.google.com/issues/325299275). Always on in the app.
  */
 object Motion {
+    /** Off in tests: animations keep Compose busy and make UI tests flaky. */
     @Volatile var animateLists = true
+    /** When the current screen opened: cards only animate in just after that, never on scroll. */
+    @Volatile var openedAt = 0L
+    /** Cards animated since then, for a small stagger. */
+    @Volatile var risen = 0
+
+    fun screenOpened() { openedAt = android.os.SystemClock.uptimeMillis(); risen = 0 }
+    fun justOpened(windowMs: Long = 900): Boolean = animateLists && android.os.SystemClock.uptimeMillis() - openedAt < windowMs
 }
 
 private val RpeValues = listOf(6.0, 7.0, 8.0, 9.0, 10.0)

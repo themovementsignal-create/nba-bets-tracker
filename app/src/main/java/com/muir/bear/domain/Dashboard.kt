@@ -12,6 +12,7 @@ object Dashboard {
         TICKS("ticks", "Daily ticks"),
         SLEEP("sleep", "Sleep"),
         STEPS("steps", "Steps & NEAT"),
+        HRV("hrv", "HRV"),
         CONDITIONING("conditioning", "Conditioning"),
         NIGGLES("niggles", "Niggles"),
         GEAR("gear", "Gear"),
@@ -34,7 +35,8 @@ object Dashboard {
 
     data class Entry(val item: Item, val shown: Boolean)
 
-    val default: List<Entry> = Item.entries.map { Entry(it, true) }
+    /** Niggles and gear start hidden: they still show up on their own when something needs attention. */
+    val default: List<Entry> = Item.entries.map { Entry(it, it != Item.NIGGLES && it != Item.GEAR) }
     /** Protein is off unless you turn it on. */
     val defaultTicks: Set<Tick> = Tick.entries.toSet() - Tick.PROTEIN
 

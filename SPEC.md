@@ -67,6 +67,7 @@ Methods from published exercise science, built into the app (no copied code). Ho
 - [x] Daily readiness on Today, built from sleep vs your baseline, check-in, fatigue and niggles (and HRV when available), always showing its reasons
 - [ ] Morning HRV and resting heart rate with the phone camera (fingertip, 1 min of clean signal, exposure locked, pauses if your finger slips, live pulse and buzzes, quality-checked) — rebuilt for ease of use; confirm on a real phone
 - [x] Weekly summary
+- [ ] Soft "bento" look across the app: rounded cards with a faint glow, big light numbers; Today as a grid of tiles (readiness gauge, sleep, steps, HRV) that count up and draw in once when it opens
 
 ## Phase 4: Claude
 - [ ] Program review reminder: after a set number of weeks on a block (default 6), prompt a review

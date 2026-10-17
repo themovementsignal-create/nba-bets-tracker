@@ -2,7 +2,11 @@
 
 package com.muir.bear.ui.theme
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -60,7 +64,7 @@ private val BearDark = darkColorScheme(
     outlineVariant = Color(0xFF3A3936),
     scrim = Color.Black,
     surfaceBright = Color(0xFF353432),
-    surfaceContainer = Color(0xFF1C1C1B),
+    surfaceContainer = Color(0xFF1A1A19),
     surfaceContainerHigh = Color(0xFF242423),
     surfaceContainerHighest = Color(0xFF2D2D2B),
     surfaceContainerLow = Color(0xFF181818),
@@ -78,7 +82,7 @@ private fun archivo(weight: Int) =
     Font(R.font.archivo, FontWeight(weight), variationSettings = FontVariation.Settings(FontVariation.weight(weight)))
 
 /** Archivo: the app's everyday typeface (one variable font file, several weights). */
-val Archivo = FontFamily(archivo(400), archivo(500), archivo(600), archivo(700))
+val Archivo = FontFamily(archivo(300), archivo(400), archivo(500), archivo(600), archivo(700))
 
 /** Cormorant Garamond italic: the motto line only. */
 val CormorantItalic = FontFamily(
@@ -92,22 +96,32 @@ private val base = Typography()
 
 private fun TextStyle.archivo(weight: FontWeight? = null) = copy(fontFamily = Archivo, fontWeight = weight ?: fontWeight)
 
+// Soft and calm: big numbers are large but light, with tight spacing; labels are medium weight.
 private val BearTypography = Typography(
-    displayLarge = base.displayLarge.archivo(FontWeight.SemiBold),
-    displayMedium = base.displayMedium.archivo(FontWeight.SemiBold),
-    displaySmall = base.displaySmall.archivo(FontWeight.SemiBold),
-    headlineLarge = base.headlineLarge.archivo(FontWeight.SemiBold),
-    headlineMedium = base.headlineMedium.archivo(FontWeight.SemiBold),
-    headlineSmall = base.headlineSmall.archivo(FontWeight.SemiBold),
-    titleLarge = base.titleLarge.archivo(FontWeight.SemiBold),
-    titleMedium = base.titleMedium.archivo(FontWeight.SemiBold),
-    titleSmall = base.titleSmall.archivo(FontWeight.SemiBold),
+    displayLarge = base.displayLarge.archivo(FontWeight.Light).copy(letterSpacing = (-1.5).sp),
+    displayMedium = base.displayMedium.archivo(FontWeight.Light).copy(letterSpacing = (-1.2).sp),
+    displaySmall = base.displaySmall.archivo(FontWeight.Light).copy(letterSpacing = (-1).sp),
+    headlineLarge = base.headlineLarge.archivo(FontWeight.Normal).copy(letterSpacing = (-0.5).sp),
+    headlineMedium = base.headlineMedium.archivo(FontWeight.Normal).copy(letterSpacing = (-0.4).sp),
+    headlineSmall = base.headlineSmall.archivo(FontWeight.Medium),
+    titleLarge = base.titleLarge.archivo(FontWeight.Medium),
+    titleMedium = base.titleMedium.archivo(FontWeight.Medium),
+    titleSmall = base.titleSmall.archivo(FontWeight.Medium),
     bodyLarge = base.bodyLarge.archivo(),
     bodyMedium = base.bodyMedium.archivo(),
     bodySmall = base.bodySmall.archivo(),
-    labelLarge = base.labelLarge.archivo(FontWeight.SemiBold),
+    labelLarge = base.labelLarge.archivo(FontWeight.Medium),
     labelMedium = base.labelMedium.archivo(),
     labelSmall = base.labelSmall.archivo(),
+)
+
+// Generous rounding everywhere: cards 22dp, fields and chips 12–14dp, buttons pill-shaped.
+private val BearShapes = Shapes(
+    extraSmall = RoundedCornerShape(12.dp),
+    small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(22.dp),
+    large = RoundedCornerShape(22.dp),
+    extraLarge = RoundedCornerShape(28.dp),
 )
 
 // Dark theme only (gym floor).
@@ -116,6 +130,7 @@ fun BearTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = BearDark,
         typography = BearTypography,
+        shapes = BearShapes,
         content = content,
     )
 }

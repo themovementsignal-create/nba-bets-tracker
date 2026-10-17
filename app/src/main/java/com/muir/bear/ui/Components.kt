@@ -93,6 +93,11 @@ fun AppTopBar(title: String, onBack: (() -> Unit)? = null, actions: @Composable 
     )
 }
 
+/**
+ * The card every screen is built from: soft 22dp corners, a hairline edge and a faint tinted glow
+ * in one corner (the tint follows the title, so cards differ a little). Quiet label on top, with a
+ * small ↗ when the card opens something. Rises in gently when a screen opens.
+ */
 @Composable
 fun SectionCard(
     title: String? = null,
@@ -100,20 +105,12 @@ fun SectionCard(
     onClick: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
-    val colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-    val inner: @Composable () -> Unit = {
-        Column(Modifier.padding(16.dp)) {
-            if (title != null) {
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(8.dp))
-            }
-            content()
+    Column(modifier.fillMaxWidth().bentoSurface(glowFor(title), onClick).padding(18.dp)) {
+        if (title != null) {
+            CardLabel(title, arrow = onClick != null)
+            Spacer(Modifier.height(10.dp))
         }
-    }
-    if (onClick != null) {
-        Card(onClick = onClick, modifier = modifier.fillMaxWidth(), colors = colors) { inner() }
-    } else {
-        Card(modifier = modifier.fillMaxWidth(), colors = colors) { inner() }
+        content()
     }
 }
 

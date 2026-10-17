@@ -3,6 +3,18 @@
 package com.muir.bear.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.Button
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
+import com.muir.bear.steps.Steps
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -64,7 +76,24 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
 
-private data class Tile(val title: String, val status: String, val screen: Screen, val done: Boolean = false, val spark: List<Float>? = null)
+/** One bento tile: a big number (or word), its unit, a small chart and a footer line. */
+private data class Tile(
+    val title: String,
+    val screen: Screen,
+    val value: Double? = null,
+    val decimals: Int = 0,
+    /** Where the number counts up from when Today opens (e.g. yesterday's value). */
+    val from: Double? = null,
+    /** Shown instead of a number when there isn't one. */
+    val text: String? = null,
+    val unit: String = "",
+    val footLeft: String = "",
+    val footRight: String? = null,
+    val done: Boolean = false,
+    val bars: List<Float>? = null,
+    /** Counting right now (pedometer): a small pulsing dot. */
+    val live: Boolean = false,
+)
 
 @Composable
 fun HomeScreen(nav: Nav) {
@@ -157,31 +186,74 @@ fun HomeScreen(nav: Nav) {
             .sumOf { (it.wakeAt!! - it.bedAt) / 3_600_000.0 }.toFloat()
     }
     val stepBars = week7.map { d -> (steps.firstOrNull { it.day == d }?.steps ?: 0).toFloat() }
+    val context = LocalContext.current
+    val stepSensor = remember { Steps.available(context) }
 
     fun tile(item: Dashboard.Item): Tile? = when (item) {
-        Dashboard.Item.SLEEP -> Tile("Sleep", when {
-            tracking != null -> "Tracking since ${fmtTime(tracking!!.startedAt)}"
-            sleepingNow != null -> "In bed since ${fmtTime(sleepingNow.bedAt)}"
-            lastSleep != null -> (lastSleep.score?.let { "Score $it · " } ?: "") +
-                "%.1f h".format((lastSleep.wakeAt!! - lastSleep.bedAt) / 3600_000.0) + (lastSleep.quality?.let { " · $it/5" } ?: "")
-            else -> "Smart alarm & tracking"
-        }, Screen.Sleep, lastSleep?.wakeAt?.toLocalDate() == todayDate, spark = sleepBars)
-        Dashboard.Item.STEPS -> Tile("Steps & NEAT", "%,d steps · ".format(steps.firstOrNull { it.day == today() }?.steps ?: 0) +
-            "${neat.count { it.startedAt.toLocalDate().toEpochDay() >= weekStart }}/$neatTarget", Screen.Neat, spark = stepBars)
-        Dashboard.Item.CONDITIONING -> Tile("Conditioning", sport.firstOrNull()?.let { "${activityTitle(it).removePrefix("Conditioning · ")} ${fmtDate(it.startedAt)}" } ?: "None yet", Screen.Activity)
-        Dashboard.Item.NIGGLES -> Tile("Niggles", if (recentNiggles.isEmpty()) "None active" else "${recentNiggles.size} active", Screen.Niggle)
-        Dashboard.Item.GEAR -> Tile("Gear", if (gearNudges.isEmpty()) "All good" else "${gearNudges.size} to replace", Screen.Gear)
+        Dashboard.Item.SLEEP -> {
+            val nights = sleeps.filter { it.wakeAt != null && it.wakeAt - it.bedAt >= 3_600_000L }
+            val hours = nights.map { (it.wakeAt!! - it.bedAt) / 3_600_000.0 }
+            when {
+                tracking != null -> Tile("Sleep", Screen.Sleep, text = "Tracking", unit = "since ${fmtTime(tracking!!.startedAt)}", footLeft = "Sleep well", bars = sleepBars)
+                sleepingNow != null -> Tile("Sleep", Screen.Sleep, text = "In bed", unit = "since ${fmtTime(sleepingNow.bedAt)}", bars = sleepBars)
+                hours.isNotEmpty() -> Tile(
+                    "Sleep", Screen.Sleep, value = hours.first(), decimals = 1, from = hours.getOrNull(1), unit = "hours",
+                    footLeft = nights.first().score?.let { "Score $it" } ?: "Last night",
+                    footRight = nights.first().quality?.let { "$it/5" },
+                    done = nights.first().wakeAt!!.toLocalDate() == todayDate, bars = sleepBars,
+                )
+                else -> Tile("Sleep", Screen.Sleep, text = "–", unit = "hours", footLeft = "Track tonight", bars = sleepBars)
+            }
+        }
+        Dashboard.Item.STEPS -> {
+            val past = stepBars.dropLast(1).filter { it > 0f }
+            Tile(
+                "Steps", Screen.Neat, value = (steps.firstOrNull { it.day == today() }?.steps ?: 0).toDouble(), from = 0.0,
+                unit = "steps today",
+                footLeft = "NEAT ${neat.count { it.startedAt.toLocalDate().toEpochDay() >= weekStart }}/$neatTarget",
+                footRight = if (past.isNotEmpty()) "avg %,d".format(past.average().roundToInt()) else null,
+                bars = stepBars, live = stepSensor,
+            )
+        }
+        Dashboard.Item.HRV -> {
+            val latest = hrv.firstOrNull()
+            val baseline = hrv.drop(1).filter { it.at >= System.currentTimeMillis() - 30 * 86_400_000L }.map { it.rmssdMs }
+            val measuredToday = latest?.at?.toLocalDate() == todayDate
+            if (latest == null) Tile("HRV", Screen.Hrv, text = "–", unit = "ms", footLeft = "Measure ›")
+            else Tile(
+                "HRV", Screen.Hrv, value = latest.rmssdMs, from = hrv.getOrNull(1)?.rmssdMs, unit = "ms · ${latest.heartRate.roundToInt()} bpm",
+                footLeft = if (measuredToday) "This morning" else "Measure ›",
+                footRight = if (baseline.size >= 3) (latest.rmssdMs - baseline.average()).roundToInt().let { if (it >= 0) "+$it" else "$it" } else null,
+                done = measuredToday, bars = hrv.take(14).reversed().map { it.rmssdMs.toFloat() },
+            )
+        }
+        Dashboard.Item.CONDITIONING -> {
+            val week = sport.count { it.startedAt.toLocalDate().toEpochDay() >= weekStart }
+            Tile(
+                "Conditioning", Screen.Activity, value = week.toDouble(), unit = if (week == 1) "session this week" else "sessions this week",
+                footLeft = sport.firstOrNull()?.let { "${activityTitle(it).removePrefix("Conditioning · ")} · ${fmtDate(it.startedAt)}" } ?: "None yet",
+                done = sport.firstOrNull()?.startedAt?.toLocalDate() == todayDate,
+            )
+        }
+        Dashboard.Item.NIGGLES -> Tile(
+            "Niggles", Screen.Niggle, value = recentNiggles.size.toDouble(), unit = "active",
+            footLeft = if (recentNiggles.isEmpty()) "All clear" else "Last 14 days",
+        )
+        Dashboard.Item.GEAR -> Tile(
+            "Gear", Screen.Gear, value = gearNudges.size.toDouble(), unit = "to replace",
+            footLeft = if (gearNudges.isEmpty()) "All good" else gearNudges.first().substringBefore(':'),
+        )
         else -> null
     }
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            Column {
+            Column(Modifier.padding(top = 6.dp, bottom = 4.dp)) {
+                Text(todayDate.format(DateTimeFormatter.ofPattern("EEEE d MMMM")), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Gap(10)
                 BearWordmark(fontSize = 36.sp)
                 Gap(2)
                 BearMotto()
-                Gap(12)
-                Text(todayDate.format(DateTimeFormatter.ofPattern("EEEE d MMMM")), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         active?.let { w ->
@@ -215,8 +287,8 @@ fun HomeScreen(nav: Nav) {
         fun flushTiles() {
             pendingTiles.chunked(2).forEach { pair ->
                 item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        pair.forEach { t -> TileCard(t, Modifier.weight(1f)) { nav.go(t.screen) } }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        pair.forEach { t -> BentoTile(t, Modifier.weight(1f)) { nav.go(t.screen) } }
                         if (pair.size == 1) Column(Modifier.weight(1f)) {}
                     }
                 }
@@ -229,13 +301,27 @@ fun HomeScreen(nav: Nav) {
             flushTiles()
             when (entry.item) {
                 Dashboard.Item.READINESS -> item {
-                    SectionCard("Readiness", onClick = { nav.go(if (todaysCheckIn == null) Screen.CheckIn else Screen.Insights) }) {
+                    // The one card that sums up today: a slow breathing glow and a gauge that sweeps in.
+                    val breath = rememberBreath()
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .bentoSurface(MaterialTheme.colorScheme.primary, { nav.go(if (todaysCheckIn == null) Screen.CheckIn else Screen.Insights) }, glowAlpha = 0.10f + 0.14f * breath)
+                            .padding(18.dp),
+                    ) {
+                        CardLabel("Readiness", arrow = true)
                         val r = readiness
                         if (r == null) {
+                            Gap(8)
                             Muted("Do your morning check-in (and track or log last night's sleep) to see how ready you are today.")
                         } else {
-                            Text(r.call, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
-                            Gap(4)
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Text(r.call, Modifier.weight(1f).padding(top = 10.dp), style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
+                                HalfGauge(
+                                    when (r.call) { "Ready" -> 0.82f; "Go easy" -> 0.28f; else -> 0.55f },
+                                    Modifier.size(width = 108.dp, height = 60.dp),
+                                )
+                            }
+                            Gap(8)
                             r.signals.take(4).forEach { s ->
                                 Text(
                                     "· ${s.reason}",
@@ -266,7 +352,8 @@ fun HomeScreen(nav: Nav) {
                 Dashboard.Item.LIFTS -> item { KeyLiftsCard(liftsSetting, workouts.size, nav) }
                 Dashboard.Item.MONTH -> item {
                     SectionCard("Sessions this month") {
-                        Text("$monthSessions / $monthTarget", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                        Text("$monthSessions / $monthTarget", style = MaterialTheme.typography.displaySmall)
+                        Gap(8)
                         LinearProgressIndicator(progress = { (monthSessions.toFloat() / monthTarget).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
                         Gap(4)
                         Muted("Strength workouts + conditioning")
@@ -363,21 +450,30 @@ private fun NextSessionCard(templates: List<Template>, finished: List<Workout>, 
     val lastOfIt = done.filter { it.templateId == nextId }.maxOfOrNull { it.startedAt }
     val lastAny = finished.maxByOrNull { it.startedAt }
     SectionCard("Next session") {
-        Text(next.name, style = MaterialTheme.typography.titleLarge)
-        Muted(
-            (lastOfIt?.let { "Last done ${fmtDate(it)}" } ?: "Not done yet") +
-                (lastAny?.let { " · last workout ${fmtDate(it.startedAt)}" } ?: ""),
-        )
-        Gap(8)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(next.name, style = MaterialTheme.typography.titleLarge)
+                Muted(
+                    (lastOfIt?.let { "Last done ${fmtDate(it)}" } ?: "Not done yet") +
+                        (lastAny?.let { " · last workout ${fmtDate(it.startedAt)}" } ?: ""),
+                )
+            }
+            if (!workoutActive) {
+                HGap(12)
+                Button(
+                    onClick = {
+                        scope.launch {
+                            val id = Actions.startWorkout(next.id)
+                            nav.go(Screen.Workout(id))
+                        }
+                    },
+                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
+                ) { Text("Start", style = MaterialTheme.typography.titleMedium) }
+            }
+        }
         if (workoutActive) {
+            Gap(8)
             Muted("A workout is in progress: finish it first, or resume it above.")
-        } else {
-            BigButton("Start", onClick = {
-                scope.launch {
-                    val id = Actions.startWorkout(next.id)
-                    nav.go(Screen.Workout(id))
-                }
-            })
         }
     }
 }
@@ -385,10 +481,12 @@ private fun NextSessionCard(templates: List<Template>, finished: List<Workout>, 
 /** A small daily log chip: bronze once done today. */
 @Composable
 private fun TickChip(label: String, value: String?, done: Boolean, onClick: () -> Unit) {
-    val bg = if (done) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer
+    val shape = MaterialTheme.shapes.small
+    val m = if (done) Modifier.background(MaterialTheme.colorScheme.secondaryContainer, shape)
+    else Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
     Row(
-        Modifier
-            .background(bg, RoundedCornerShape(20.dp))
+        m
+            .clip(shape)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -403,12 +501,15 @@ private fun TickChip(label: String, value: String?, done: Boolean, onClick: () -
 private fun MiniBars(values: List<Float>) {
     val color = MaterialTheme.colorScheme.primary
     val empty = MaterialTheme.colorScheme.surfaceVariant
-    Canvas(Modifier.fillMaxWidth().height(22.dp)) {
+    val grow = rememberDrawIn()
+    Canvas(Modifier.fillMaxWidth().height(28.dp)) {
         val max = (values.maxOrNull() ?: 0f).coerceAtLeast(0.0001f)
         val gap = 4.dp.toPx()
         val w = (size.width - gap * (values.size - 1)) / values.size
         values.forEachIndexed { i, v ->
-            val h = if (v <= 0f) 2.dp.toPx() else (v / max) * size.height
+            // Bars grow in left to right as Today opens.
+            val g = ((grow * (values.size + 3) - i) / 4f).coerceIn(0f, 1f)
+            val h = if (v <= 0f) 2.dp.toPx() else (v / max) * size.height * g
             drawRoundRect(
                 color = if (v <= 0f) empty else color.copy(alpha = if (i == values.lastIndex) 1f else 0.55f),
                 topLeft = Offset(i * (w + gap), size.height - h),
@@ -470,20 +571,44 @@ private fun KeyLiftsCard(liftsSetting: String?, workoutCount: Int, nav: Nav) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TileCard(t: Tile, modifier: Modifier, onClick: () -> Unit) {
-    Card(
-        onClick = onClick,
-        modifier = modifier.heightIn(min = 84.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (t.done) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
-        ),
-    ) {
-        Column(Modifier.fillMaxWidth().padding(12.dp)) {
-            Text(t.title + if (t.done) " ✓" else "", style = MaterialTheme.typography.titleMedium)
-            Muted(t.status)
-            t.spark?.let { Gap(6); MiniBars(it) }
+private fun BentoTile(t: Tile, modifier: Modifier, onClick: () -> Unit) {
+    Column(modifier.height(170.dp).bentoSurface(glowFor(t.title), onClick).padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                t.title + if (t.done) " ✓" else "",
+                Modifier.weight(1f),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                maxLines = 1,
+            )
+            if (t.live) { LiveDot(); HGap(6) }
+            ArrowUpRight()
+        }
+        Gap(10)
+        val big = MaterialTheme.typography.displaySmall
+        if (t.value != null) {
+            CountUp(t.value, { v -> if (t.decimals > 0) "%.${t.decimals}f".format(v) else "%,d".format(v.roundToInt()) }, big, from = t.from)
+        } else {
+            Text(t.text ?: "–", style = if ((t.text?.length ?: 0) > 4) MaterialTheme.typography.headlineMedium else big, maxLines = 1)
+        }
+        Text(t.unit, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        Box(Modifier.weight(1f))
+        t.bars?.let { MiniBars(it); Gap(8) }
+        Row {
+            Text(t.footLeft, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            t.footRight?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium) }
         }
     }
+}
+
+/** A small bronze dot that pulses slowly: this number is counting right now. */
+@Composable
+private fun LiveDot() {
+    val primary = MaterialTheme.colorScheme.primary
+    val a = if (Motion.animateLists) {
+        val t = rememberInfiniteTransition(label = "live")
+        t.animateFloat(1f, 0.25f, infiniteRepeatable(tween(1_200), RepeatMode.Reverse), label = "dot").value
+    } else 1f
+    Canvas(Modifier.size(7.dp)) { drawCircle(primary.copy(alpha = a)) }
 }
