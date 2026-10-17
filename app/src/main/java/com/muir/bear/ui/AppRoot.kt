@@ -131,11 +131,10 @@ fun AppRoot() {
                 MainActivity.openRequest.value = null
                 if (nav.stack.lastOrNull() != Screen.Supplements) nav.go(Screen.Supplements)
             }
-            // Just turned the alarm off: your morning check-ins (unless switched off).
+            // Just turned the alarm off, or stopped tracking: your morning check-ins (unless switched off).
             "morning" -> {
                 MainActivity.openRequest.value = null
-                if ((Graph.dao.setting(Settings.MORNING_AFTER_ALARM) ?: "1") == "1") {
-                    nav.home()
+                if ((Graph.dao.setting(Settings.MORNING_AFTER_ALARM) ?: "1") == "1" && nav.stack.lastOrNull() != Screen.Morning) {
                     nav.go(Screen.Morning)
                 }
             }

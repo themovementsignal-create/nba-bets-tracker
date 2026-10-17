@@ -650,6 +650,7 @@ fun SupplementsScreen(nav: Nav) {
     var edit by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
     var pickFor by remember { mutableStateOf<Supplement?>(null) }
+    var pickAll by remember { mutableStateOf(false) }
 
     fun saveReminder(id: Long, minute: Int?) {
         Graph.scope.launch {
@@ -667,8 +668,34 @@ fun SupplementsScreen(nav: Nav) {
         )
     }
 
+    // One time for all of them (each supplement can still have its own below).
+    val times = supplements.map { SuppReminders.timeOf(reminders, it.id) }
+    val shared = times.firstOrNull()?.takeIf { t -> times.all { it == t } }
+    fun saveAll(minute: Int?) {
+        Graph.scope.launch {
+            val list = supplements.fold(reminders) { acc, s -> SuppReminders.set(acc, s.id, minute) }
+            dao.putSetting(Setting(Settings.SUPP_REMINDERS, SuppReminders.serialize(list)))
+            SupplementReminders.reschedule(context)
+        }
+    }
+    if (pickAll) ReminderTimeDialog(
+        name = "your supplements",
+        current = shared,
+        onDismiss = { pickAll = false },
+        onPick = { minute -> pickAll = false; saveAll(minute) },
+    )
+
     LogScaffold("Supplements", nav) {
         item { Muted("Today: ${taken.size} of ${supplements.size} taken") }
+        if (supplements.isNotEmpty()) item {
+            SectionCard("Daily reminder", onClick = { pickAll = true }) {
+                when {
+                    shared != null -> Text("Every day at ${SuppReminders.fmt(shared)}", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+                    times.any { it != null } -> Muted("Set per supplement below. Tap to use one time for all of them.")
+                    else -> Muted("Tap to pick a time. Bear reminds you each day, listing only what you haven't ticked.")
+                }
+            }
+        }
         items(supplements, key = { it.id }) { s ->
             SectionCard(onClick = {
                 scope.launch {

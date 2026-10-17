@@ -239,6 +239,10 @@ class UiTourTest {
             compose.waitForIdle()
             shot("sleep-tracking")
             tap("Stop · I'm awake")
+            // Up before the alarm: the morning check-ins open too.
+            waitFor("Good morning")
+            shot("morning-after-stop")
+            back()
             waitFor("Good morning — how did you sleep?")
             shot("sleep-morning")
             tap("See last night ›")

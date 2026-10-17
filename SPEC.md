@@ -41,7 +41,7 @@ Kotlin, Jetpack Compose, Material 3, Room (SQLite), Health Connect (Phase 3). Mi
 - [x] Sleep: tap at bed and wake, rate quality 1–5
 - [ ] Sleep tracking like Sleep Cycle: phone on the mattress, movement-based sleep stages, on-device YAMNet snore detection, smart alarm in a wake window, nightly score
 - [x] Bulletproof wake-up alarm: held by Android itself (rings even if tracking is closed), louder fallbacks, tracking resumes after being closed, alarm checks + test alarm
-- [ ] Morning screen after the alarm: "I'm up" opens check-in, bodyweight, supplements and HRV on one screen (can be switched off on the Sleep screen)
+- [ ] Morning screen after the alarm (or "Stop · I'm awake"): opens check-in, bodyweight, supplements and HRV on one screen (can be switched off on the Sleep screen)
 - [ ] Pedometer: daily steps from the phone's step counter
 - [x] Morning check-in: sleep, soreness, energy (1–5 each)
 - [x] Niggle log: tap a body map region and side, severity 0–10, notes
@@ -66,7 +66,7 @@ Methods from published exercise science, built into the app (no copied code). Ho
 - [x] Sleep debt and regularity
 - [x] Strength trends with gentle plateau flags
 - [x] Daily readiness on Today, built from sleep vs your baseline, check-in, fatigue and niggles (and HRV when available), always showing its reasons
-- [ ] Morning HRV and resting heart rate with the phone camera (fingertip, 1 min of clean signal, exposure locked, pauses if your finger slips, live pulse and buzzes, quality-checked) — rebuilt for ease of use; confirm on a real phone
+- [x] Morning HRV and resting heart rate with the phone camera (fingertip, 1 min of clean signal, exposure locked, pauses if your finger slips, live pulse and buzzes, quality-checked)
 - [x] Weekly summary
 - [x] Soft "bento" look across the app: rounded cards with a faint glow, big light numbers; Today as a grid of tiles (readiness gauge, sleep, steps, HRV) that count up and draw in once when it opens
 

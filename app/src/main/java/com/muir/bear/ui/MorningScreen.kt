@@ -133,6 +133,7 @@ fun MorningScreen(nav: Nav) {
                         Text(s.name)
                     }
                 }
+                TextButton(onClick = { nav.go(Screen.Supplements) }) { Text("Reminder times ›") }
             }
         }
         item {

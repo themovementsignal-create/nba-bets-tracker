@@ -168,7 +168,7 @@ fun SleepScreen(nav: Nav) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text("Morning check-ins")
-                                Muted("When you turn the alarm off, open check-in, bodyweight, supplements and HRV on one screen.")
+                                Muted("When you turn the alarm off or stop tracking, open check-in, bodyweight, supplements and HRV on one screen.")
                             }
                             Switch(checked = morningOn, onCheckedChange = { put(Settings.MORNING_AFTER_ALARM, if (it) "1" else "0") })
                         }
@@ -227,7 +227,11 @@ private fun TrackingCard(l: SleepTracker.Live, nextAlarm: Long?, onChangeAlarm: 
             else -> "Loudness only"
         })
         Gap(12)
-        BigButton("Stop · I'm awake", onClick = { SleepTracker.stop(context) })
+        BigButton("Stop · I'm awake", onClick = {
+            SleepTracker.stop(context)
+            // Up before the alarm: same morning check-ins as "I'm up".
+            MainActivity.openRequest.value = "morning"
+        })
     }
 }
 
