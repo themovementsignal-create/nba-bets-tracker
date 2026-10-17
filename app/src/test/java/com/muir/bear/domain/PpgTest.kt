@@ -70,4 +70,37 @@ class PpgTest {
     @Test fun tooShort() {
         assertNull(Ppg.analyze(DoubleArray(10) { it.toDouble() }, DoubleArray(10)))
     }
+
+    private fun slice(t: DoubleArray, v: DoubleArray, from: Double, to: Double): Pair<DoubleArray, DoubleArray> {
+        val idx = t.indices.filter { t[it] >= from && t[it] < to }
+        return DoubleArray(idx.size) { t[idx[it]] } to DoubleArray(idx.size) { v[idx[it]] }
+    }
+
+    @Test fun fingerSlipGapIsNotABeat() {
+        val (t, v, _) = synth(meanRr = 1000.0, swing = 25.0, seconds = 70.0, noise = 0.4, seed = 5)
+        // Finger off from 30 s to 37 s: two stretches.
+        val r = Ppg.analyzeSegments(listOf(slice(t, v, 0.0, 30.0), slice(t, v, 37.0, 70.0)))!!
+        assertEquals(60.0, r.heartRate, 2.0)
+        assertEquals(Ppg.Quality.GOOD, r.quality)
+    }
+
+    @Test fun messyStartIsRescued() {
+        val (t, v, _) = synth(meanRr = 1000.0, swing = 25.0, seconds = 70.0, noise = 0.4, seed = 9)
+        val rnd = Random(11)
+        // First 22 s: finger moving about, no usable pulse.
+        for (i in t.indices) if (t[i] < 22) v[i] = 180 + 12 * (rnd.nextDouble() - 0.5)
+        val r = Ppg.analyzeSegments(listOf(t to v))!!
+        assertTrue(r.quality != Ppg.Quality.POOR)
+        assertEquals(60.0, r.heartRate, 2.0)
+    }
+
+    @Test fun liveSignal() {
+        val (t, v, _) = synth(meanRr = 800.0, swing = 10.0, seconds = 8.0, noise = 0.4, seed = 2)
+        val live = Ppg.live(t, v)
+        assertEquals(Ppg.Signal.GOOD, live.signal)
+        assertEquals(75.0, live.heartRate!!, 3.0)
+        val rnd = Random(4)
+        val flat = DoubleArray(t.size) { 180 + 0.2 * (rnd.nextDouble() - 0.5) }
+        assertTrue(Ppg.live(t, flat).signal != Ppg.Signal.GOOD)
+    }
 }

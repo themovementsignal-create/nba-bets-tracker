@@ -63,7 +63,7 @@ Methods from published exercise science, built into the app (no copied code). Ho
 - [x] Sleep debt and regularity
 - [x] Strength trends with gentle plateau flags
 - [x] Daily readiness on Today, built from sleep vs your baseline, check-in, fatigue and niggles (and HRV when available), always showing its reasons
-- [ ] Morning HRV and resting heart rate with the phone camera (fingertip, about 2 min, quality-checked) — built; confirm on a real phone
+- [ ] Morning HRV and resting heart rate with the phone camera (fingertip, 1 min of clean signal, exposure locked, pauses if your finger slips, live pulse and buzzes, quality-checked) — rebuilt for ease of use; confirm on a real phone
 - [x] Weekly summary
 
 ## Phase 4: Claude

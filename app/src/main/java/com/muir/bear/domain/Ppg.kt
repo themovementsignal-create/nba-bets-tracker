@@ -14,7 +14,8 @@ import kotlin.math.sqrt
  *  3. Beat-to-beat (RR) intervals; reject implausible ones (outside 300–2000 ms or more than 20%
  *     away from the local median), and report the share rejected as signal quality.
  *  4. RMSSD (the standard short-term HRV measure) from successive valid intervals; heart rate
- *     from the median interval.
+ *     from the median interval. One minute is enough: ultra-short RMSSD tracks longer recordings
+ *     closely, and it's what the best-validated camera apps use.
  */
 object Ppg {
     enum class Quality { GOOD, OK, POOR }
@@ -77,34 +78,93 @@ object Ppg {
         return out
     }
 
-    /** Analyse a recording: [t] in seconds, [values] the mean red brightness per frame. */
+    /** Analyse one continuous recording: [t] in seconds, [values] the mean red brightness per frame. */
     fun analyze(t: DoubleArray, values: DoubleArray): Result? {
         if (t.size < 60 || t.size != values.size) return null
-        val duration = t.last() - t.first()
-        if (duration < 20) return null
-        val fs = (t.size - 1) / duration
-        val beatTimes = peaks(t, clean(values, fs))
-        if (beatTimes.size < 10) return null
-        val rr = (1 until beatTimes.size).map { (beatTimes[it] - beatTimes[it - 1]) * 1000 }
-        val valid = BooleanArray(rr.size) { i ->
-            val x = rr[i]
+        if (t.last() - t.first() < 20) return null
+        return analyzeSegments(listOf(t to values))
+    }
+
+    /** One beat-to-beat interval: when it ended, its length (ms) and which stretch of recording it came from. */
+    private class Interval(val time: Double, val rr: Double, val segment: Int)
+
+    /**
+     * Analyse a recording made of separate stretches (the finger slipped off in between). Beats are
+     * found in each stretch on its own, so a gap never counts as one long heartbeat. If the whole
+     * thing is too messy, the cleanest [rescueSeconds] stretch is used instead of giving up.
+     */
+    fun analyzeSegments(segments: List<Pair<DoubleArray, DoubleArray>>, rescueSeconds: Double = 45.0): Result? {
+        val iv = mutableListOf<Interval>()
+        segments.forEachIndexed { seg, (t, v) ->
+            if (t.size < 60 || t.size != v.size || t.last() - t.first() < 4) return@forEachIndexed
+            val fs = (t.size - 1) / (t.last() - t.first())
+            val beats = peaks(t, clean(v, fs))
+            for (i in 1 until beats.size) iv += Interval(beats[i], (beats[i] - beats[i - 1]) * 1000, seg)
+        }
+        if (iv.isEmpty()) return null
+        // Plausible and within 20% of the local median (neighbours from the same stretch only).
+        val valid = BooleanArray(iv.size) { i ->
+            val x = iv[i].rr
             if (x < 300 || x > 2000) return@BooleanArray false
-            val window = rr.subList(max(0, i - 3), minOf(rr.size, i + 4)).sorted()
+            val window = (max(0, i - 3)..minOf(iv.size - 1, i + 3)).filter { iv[it].segment == iv[i].segment }.map { iv[it].rr }.sorted()
             val med = window[window.size / 2]
             abs(x - med) <= 0.2 * med
         }
-        val good = rr.indices.filter { valid[it] }.map { rr[it] }
+        val whole = summarize(iv, valid, iv.indices)
+        if (whole != null && whole.quality != Quality.POOR) return whole
+        // Rescue: slide a window along in 5 s steps and keep the cleanest stretch.
+        var best = whole
+        var start = iv.first().time
+        while (start + rescueSeconds <= iv.last().time + 1e-9) {
+            val first = iv.indexOfFirst { it.time >= start }
+            val last = iv.indexOfLast { it.time < start + rescueSeconds }
+            if (first in 0..last) {
+                val r = summarize(iv, valid, first..last)
+                if (r != null && (best == null || r.artifactPct < best.artifactPct)) best = r
+            }
+            start += 5.0
+        }
+        return best
+    }
+
+    private fun summarize(iv: List<Interval>, valid: BooleanArray, range: IntRange): Result? {
+        val good = range.filter { valid[it] }.map { iv[it].rr }
         if (good.size < 8) return null
-        val diffs = (1 until rr.size).filter { valid[it] && valid[it - 1] }.map { rr[it] - rr[it - 1] }
+        val diffs = range.drop(1).filter { valid[it] && valid[it - 1] && iv[it].segment == iv[it - 1].segment }
+            .map { iv[it].rr - iv[it - 1].rr }
         if (diffs.size < 5) return null
         val rmssd = sqrt(diffs.sumOf { it * it } / diffs.size)
         val medianRr = good.sorted()[good.size / 2]
-        val artifact = 100.0 * (rr.size - good.size) / rr.size
+        val total = range.count()
+        val artifact = 100.0 * (total - good.size) / total
         val quality = when {
             artifact < 5 -> Quality.GOOD
             artifact < 15 -> Quality.OK
             else -> Quality.POOR
         }
-        return Result(60_000.0 / medianRr, rmssd, beatTimes.size, artifact, quality)
+        val beats = total + range.map { iv[it].segment }.distinct().size
+        return Result(60_000.0 / medianRr, rmssd, beats, artifact, quality)
+    }
+
+    enum class Signal { NONE, WEAK, GOOD }
+
+    /** What the last few seconds look like, for live feedback while measuring. */
+    data class Live(val heartRate: Double?, val signal: Signal)
+
+    /** Live heart rate and signal strength from the last few seconds (about 8 s works well). */
+    fun live(t: DoubleArray, values: DoubleArray): Live {
+        if (t.size < 60 || t.size != values.size || t.last() - t.first() < 4) return Live(null, Signal.NONE)
+        val fs = (t.size - 1) / (t.last() - t.first())
+        val beats = peaks(t, clean(values, fs))
+        val rr = (1 until beats.size).map { (beats[it] - beats[it - 1]) * 1000 }.filter { it in 300.0..2000.0 }
+        if (rr.size < 3) return Live(null, Signal.NONE)
+        val med = rr.sorted()[rr.size / 2]
+        val steady = rr.count { abs(it - med) <= 0.2 * med }.toDouble() / rr.size
+        val signal = when {
+            steady >= 0.8 -> Signal.GOOD
+            steady >= 0.5 -> Signal.WEAK
+            else -> Signal.NONE
+        }
+        return Live(if (signal == Signal.NONE) null else 60_000.0 / med, signal)
     }
 }

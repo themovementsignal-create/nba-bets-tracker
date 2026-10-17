@@ -33,7 +33,11 @@ class PulseCamera(
     private var device: CameraDevice? = null
     private var session: CameraCaptureSession? = null
     private var reader: ImageReader? = null
+    private var request: CaptureRequest.Builder? = null
+    private var canLockAe = false
+    private var canLockAwb = false
     @Volatile private var stopped = false
+    @Volatile private var locked = false
 
     /** Caller must hold the CAMERA permission. */
     @SuppressLint("MissingPermission")
@@ -46,6 +50,8 @@ class PulseCamera(
                     c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
             } ?: return onError("This phone has no back camera with a flash.")
             val chars = cm.getCameraCharacteristics(id)
+            canLockAe = chars.get(CameraCharacteristics.CONTROL_AE_LOCK_AVAILABLE) == true
+            canLockAwb = chars.get(CameraCharacteristics.CONTROL_AWB_LOCK_AVAILABLE) == true
             val map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
                 ?: return onError("Camera not available.")
             // A small frame is plenty: we only need the average colour.
@@ -91,12 +97,13 @@ class PulseCamera(
     }
 
     private fun startSession(d: CameraDevice, r: ImageReader, fps: Range<Int>?, h: Handler) {
-        val request = d.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
+        val builder = d.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
             addTarget(r.surface)
             set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
             set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_TORCH)
             fps?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
-        }.build()
+        }
+        request = builder
         val executor = Executor { h.post(it) }
         val config = SessionConfiguration(
             SessionConfiguration.SESSION_REGULAR, listOf(OutputConfiguration(r.surface)), executor,
@@ -104,7 +111,7 @@ class PulseCamera(
                 override fun onConfigured(s: CameraCaptureSession) {
                     if (stopped) { s.close(); return }
                     session = s
-                    try { s.setRepeatingRequest(request, null, h) } catch (e: Exception) {
+                    try { s.setRepeatingRequest(builder.build(), null, h) } catch (e: Exception) {
                         ErrorLog.log("HRV", "Repeating request failed", e)
                         onError("Couldn't start the camera.")
                     }
@@ -146,12 +153,34 @@ class PulseCamera(
         onSample(img.timestamp / 1e9, red, covered)
     }
 
+    /**
+     * Freezes brightness and colour once the finger is on and the camera has adjusted to it. Left
+     * on auto, the camera keeps nudging exposure, and on many phones those nudges are bigger than
+     * the pulse itself.
+     */
+    fun lockExposure() {
+        val h = handler ?: return
+        h.post {
+            val s = session ?: return@post
+            val b = request ?: return@post
+            if (locked || stopped || (!canLockAe && !canLockAwb)) return@post
+            try {
+                if (canLockAe) b.set(CaptureRequest.CONTROL_AE_LOCK, true)
+                if (canLockAwb) b.set(CaptureRequest.CONTROL_AWB_LOCK, true)
+                s.setRepeatingRequest(b.build(), null, h)
+                locked = true
+            } catch (e: Exception) {
+                ErrorLog.log("HRV", "Couldn't lock exposure; carrying on with auto exposure", e)
+            }
+        }
+    }
+
     fun stop() {
         stopped = true
         try { session?.close() } catch (_: Exception) {}
         try { device?.close() } catch (_: Exception) {}
         try { reader?.close() } catch (_: Exception) {}
         thread?.quitSafely()
-        session = null; device = null; reader = null; thread = null; handler = null
+        session = null; device = null; reader = null; thread = null; handler = null; request = null
     }
 }
