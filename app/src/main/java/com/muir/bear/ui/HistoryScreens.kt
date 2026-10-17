@@ -121,6 +121,9 @@ fun setVolume(type: String, s: WorkoutSet): Double = when (type) {
     else -> 0.0
 }
 
+/** Estimated 1RMs are shown to the nearest half kilo: more precision than that is false. */
+fun halfKg(kg: Double): Double = (kg * 2).roundToLong() / 2.0
+
 fun fmtVolume(kg: Double): String = "%,d kg".format(kg.roundToLong())
 
 // ---------- History tab ----------
@@ -267,7 +270,7 @@ fun WorkoutDetailScreen(workoutId: Long, nav: Nav) {
                             Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                                 Text(ex?.name ?: "…", Modifier.weight(1f))
                                 Text(
-                                    if (ex?.type == ExerciseType.WEIGHT_REPS) "est. 1RM ${Calc.fmt(Calc.round2(bar))} → ${Calc.fmt(Calc.round2(best))} kg" else "new best",
+                                    if (ex?.type == ExerciseType.WEIGHT_REPS) "est. 1RM ${Calc.fmt(halfKg(bar))} → ${Calc.fmt(halfKg(best))} kg" else "new best",
                                     color = MaterialTheme.colorScheme.primary,
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.SemiBold,

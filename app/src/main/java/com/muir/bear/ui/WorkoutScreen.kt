@@ -730,7 +730,7 @@ private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: Wor
     // A new best on a lifted set: say what moved, in one line.
     if (isPr && type == ExerciseType.WEIGHT_REPS) {
         Text(
-            "est. 1RM ${Calc.fmt(Calc.round2(prBest))} → ${Calc.fmt(Calc.round2(setScore(type, set)))} kg",
+            "est. 1RM ${Calc.fmt(halfKg(prBest))} → ${Calc.fmt(halfKg(setScore(type, set)))} kg",
             Modifier.padding(start = SetCol + 4.dp, bottom = 2.dp),
             style = MaterialTheme.typography.bodySmall,
             color = primary,
