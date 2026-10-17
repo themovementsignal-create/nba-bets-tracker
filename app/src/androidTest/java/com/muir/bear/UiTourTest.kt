@@ -219,6 +219,7 @@ class UiTourTest {
             shot("sleep-alarm-time-picker")
             tapInDialog("Set alarm")
             waitFor("Alarm sound")
+            scrollTo("🌙 Start sleep tracking") // below the fold now the alarm card has more settings
             tap("🌙 Start sleep tracking")
             waitFor("Tracking your sleep 🌙")
             waitFor("Change alarm time")
