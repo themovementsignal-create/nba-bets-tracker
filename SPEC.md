@@ -27,7 +27,7 @@ Kotlin, Jetpack Compose, Material 3, Room (SQLite), Health Connect (Phase 3). Mi
   - Session 2, Push/Pull Upper: dead hang, chin-up, horizontal press, row, overhead press, face pull, cable crossover
   - Wednesday: basketball or conditioning
 - [x] Workout screen: last session's numbers beside each set, tap to complete a set, auto rest timer with vibration and notification, plate calculator with configurable bar weights (including trap bar)
-- [ ] Workout screen, game-day feel: ticks fill with bronze and one firm buzz; rest as a shot clock (last 5 s count in bronze); arena-horn buzzer with a TIME flash (horn / beep / buzz only); the current exercise bright, finished ones folded; finish summary that counts up
+- [x] Workout screen, game-day feel: ticks fill with bronze and one firm buzz; rest as a shot clock (last 5 s count in bronze); arena-horn buzzer with a TIME flash (horn / beep / buzz only); the current exercise bright, finished ones folded; finish summary that counts up
 - [x] History, PRs, estimated 1RM (Epley), per-exercise progress charts
 - [x] Strong CSV import (I'll attach an export; make the parser tolerant) — tested with sample files; confirm with a real export
 - [x] Export and backup to JSON + CSV via the share sheet; Android Auto Backup on
@@ -68,7 +68,7 @@ Methods from published exercise science, built into the app (no copied code). Ho
 - [x] Daily readiness on Today, built from sleep vs your baseline, check-in, fatigue and niggles (and HRV when available), always showing its reasons
 - [ ] Morning HRV and resting heart rate with the phone camera (fingertip, 1 min of clean signal, exposure locked, pauses if your finger slips, live pulse and buzzes, quality-checked) — rebuilt for ease of use; confirm on a real phone
 - [x] Weekly summary
-- [ ] Soft "bento" look across the app: rounded cards with a faint glow, big light numbers; Today as a grid of tiles (readiness gauge, sleep, steps, HRV) that count up and draw in once when it opens
+- [x] Soft "bento" look across the app: rounded cards with a faint glow, big light numbers; Today as a grid of tiles (readiness gauge, sleep, steps, HRV) that count up and draw in once when it opens
 
 ## Phase 4: Claude
 - [ ] Program review reminder: after a set number of weeks on a block (default 6), prompt a review
