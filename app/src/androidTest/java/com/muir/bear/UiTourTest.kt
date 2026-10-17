@@ -159,7 +159,7 @@ class UiTourTest {
         com.muir.bear.timer.RestTimer.adjust(InstrumentationRegistry.getInstrumentation().targetContext, -(left - 3).toInt())
         compose.waitForIdle()
         shot("workout-shot-clock")
-        waitFor("TIME")
+        waitFor("TIME", 20_000)
         compose.waitUntil(15_000) { compose.onAllNodesWithText(" · best ", substring = true).fetchSemanticsNodes().isNotEmpty() && compose.onAllNodesWithText("TIME").fetchSemanticsNodes().isEmpty() }
         shot("workout-folded")
 

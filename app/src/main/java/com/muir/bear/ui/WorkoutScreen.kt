@@ -259,8 +259,12 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
                     Text("$done/${sets.size} sets", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            // The exercise you're on: the first with a set still to do. It's the bright card.
-            val currentGroup = shown.firstOrNull { gid -> groupsById.getValue(gid).any { !it.completed } }
+            // The exercise you're on: the one you're resting in (until just after the buzzer),
+            // otherwise the first with a set still to do. It's the bright card.
+            val restingIn = (rest?.setId ?: finished?.takeIf { now - it.at < 2_500 }?.setId)?.let { sid ->
+                shown.firstOrNull { gid -> groupsById.getValue(gid).any { it.id == sid } }
+            }
+            val currentGroup = restingIn ?: shown.firstOrNull { gid -> groupsById.getValue(gid).any { !it.completed } }
             items(shown, key = { it }) { groupId ->
                 val groupSets = groupsById.getValue(groupId)
                 val ids = groupSets.map { it.id }
@@ -929,7 +933,7 @@ private fun RestDivider(
     val justBuzzed = finished?.takeIf { it.setId == set.id && now - it.at < 2_000 }
     when {
         activeRest != null -> ShotClock(activeRest, now, nextLabel, onActiveClick)
-        justBuzzed != null -> BuzzerFlash(justBuzzed, nextLabel)
+        justBuzzed != null -> BuzzerFlash(justBuzzed, now, nextLabel)
         else -> Box(
             Modifier.fillMaxWidth().height(30.dp).clickable { onPlannedClick() },
             contentAlignment = Alignment.Center,
@@ -997,16 +1001,16 @@ private fun ShotClock(r: RestTimer.State, now: Long, nextLabel: String?, onOpen:
 
 /** The buzzer: a bronze card that says it's time, then fades. */
 @Composable
-private fun BuzzerFlash(f: RestTimer.Finished, nextLabel: String?) {
-    val a = remember(f.at) { Animatable(1f) }
-    LaunchedEffect(f.at) {
-        delay(1_100)
-        a.animateTo(0f, tween(400))
-    }
-    if (a.value <= 0f) return
+private fun BuzzerFlash(f: RestTimer.Finished, now: Long, nextLabel: String?) {
+    // Timed off the real clock: full for 1.1 s, then fades over 0.4 s.
+    var frameNow by remember { mutableLongStateOf(now) }
+    if (Motion.animateLists) LaunchedEffect(f.at) { while (true) { withFrameMillis { }; frameNow = System.currentTimeMillis() } }
+    val age = maxOf(now, frameNow) - f.at
+    if (age >= 1_500) return
+    val alpha = if (age < 1_100) 1f else 1f - (age - 1_100) / 400f
     val onPrimary = MaterialTheme.colorScheme.onPrimary
     Column(
-        Modifier.fillMaxWidth().padding(vertical = 6.dp).graphicsLayer { alpha = a.value }
+        Modifier.fillMaxWidth().padding(vertical = 6.dp).graphicsLayer { this.alpha = alpha }
             .clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.primary).padding(vertical = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
