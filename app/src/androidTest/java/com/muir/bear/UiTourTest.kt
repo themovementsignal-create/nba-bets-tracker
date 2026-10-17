@@ -273,8 +273,9 @@ class UiTourTest {
         }
         // What "I'm up" on the alarm opens: the morning check-ins on one screen.
         MainActivity.openRequest.value = "morning"
-        waitFor("Morning HRV")
+        waitFor("Good morning")
         shot("morning")
+        scrollTo("Morning HRV")
         scrollTo("Done")
         shot("morning-bottom")
         tap("Done")
