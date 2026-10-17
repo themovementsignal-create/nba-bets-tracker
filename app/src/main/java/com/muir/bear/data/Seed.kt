@@ -57,6 +57,8 @@ object Settings {
     const val SUPP_REMINDERS = "supp_reminders"
     /** Epoch millis of a one-off "remind me in…" supplement reminder; empty = none. */
     const val SUPP_REMIND_ONCE = "supp_remind_once"
+    /** What plays when rest ends: horn (default), beep or silent (see RestTimer.Sound). */
+    const val REST_SOUND = "rest_sound"
     /** Epoch day the current training block (program) started; unset = first workout. */
     const val PROGRAM_START = "program_start"
     const val PROGRAM_REVIEW_WEEKS = "program_review_weeks"

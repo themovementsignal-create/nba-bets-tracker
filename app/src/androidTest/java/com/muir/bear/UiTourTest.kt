@@ -152,6 +152,17 @@ class UiTourTest {
         tap("+15s")
         tap("Skip")
 
+        // Tick the last set, cut its rest short and hear the buzzer; then the exercise folds to one line.
+        compose.onAllNodesWithText("✓")[2].performClick()
+        compose.waitForIdle()
+        val left = com.muir.bear.timer.RestTimer.state.value?.let { (it.endAt - System.currentTimeMillis()) / 1000 } ?: 0L
+        com.muir.bear.timer.RestTimer.adjust(InstrumentationRegistry.getInstrumentation().targetContext, -(left - 3).toInt())
+        compose.waitForIdle()
+        shot("workout-shot-clock")
+        waitFor("TIME")
+        compose.waitUntil(15_000) { compose.onAllNodesWithText(" · best ", substring = true).fetchSemanticsNodes().isNotEmpty() && compose.onAllNodesWithText("TIME").fetchSemanticsNodes().isEmpty() }
+        shot("workout-folded")
+
         // Exercise menu → plate calculator.
         compose.onAllNodesWithText("⋮")[0].performClick()
         compose.waitForIdle()

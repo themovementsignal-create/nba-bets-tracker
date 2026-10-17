@@ -3,6 +3,20 @@
 package com.muir.bear.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.withFrameMillis
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -103,6 +117,9 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
     val sets by dao.setsFlow(workoutId).collectAsState(initial = emptyList())
     val exercises by dao.exercises().collectAsState(initial = emptyList())
     val rest by RestTimer.state.collectAsState()
+    val finished by RestTimer.lastFinished.collectAsState()
+    // Finished exercises fold to one line; tap one to open it again.
+    val reopened = remember { mutableStateListOf<Long>() }
     var allExercises by remember { mutableStateOf<Map<Long, Exercise>>(emptyMap()) }
     LaunchedEffect(exercises) { allExercises = dao.allExercises().associateBy { it.id } }
 
@@ -151,13 +168,17 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
     var plateTarget by remember { mutableStateOf<Pair<Exercise, Double?>?>(null) }
 
     val w = workout
+    Box(Modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Column {
                         Text(w?.name ?: "Workout", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (w != null) Muted(fmtClock((now - w.startedAt) / 1000))
+                        if (w != null) {
+                            val lifted = sets.filter { it.completed }.sumOf { setVolume(allExercises[it.exerciseId]?.type ?: ExerciseType.WEIGHT_REPS, it) }
+                            Muted(fmtClock((now - w.startedAt) / 1000) + if (lifted > 0) " · ${fmtVolume(lifted)} lifted" else "")
+                        }
                     }
                 },
                 navigationIcon = { TextButton(onClick = { nav.back() }) { Text("‹", style = MaterialTheme.typography.headlineMedium) } },
@@ -229,10 +250,26 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
         ) {
             item {
                 val done = sets.count { it.completed }
-                Muted("$done of ${sets.size} sets done")
+                val progress by animateFloatAsState(if (sets.isEmpty()) 0f else done.toFloat() / sets.size, tween(500), label = "progress")
+                Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f).height(3.dp).clip(RoundedCornerShape(2.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                        Box(Modifier.fillMaxWidth(progress).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
+                    }
+                    HGap(10)
+                    Text("$done/${sets.size} sets", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
+            // The exercise you're on: the first with a set still to do. It's the bright card.
+            val currentGroup = shown.firstOrNull { gid -> groupsById.getValue(gid).any { !it.completed } }
             items(shown, key = { it }) { groupId ->
                 val groupSets = groupsById.getValue(groupId)
+                val ids = groupSets.map { it.id }
+                // Folds once its last rest (and the buzzer) is over, so the shot clock stays in view.
+                val allDone = groupSets.isNotEmpty() && groupSets.all { it.completed } &&
+                    rest?.setId?.let { it in ids } != true &&
+                    finished?.let { f -> f.setId?.let { it in ids } == true && now - f.at < 2_500 } != true
+                // While resting, everything but the exercise you're on steps back.
+                val dim by animateFloatAsState(if (rest != null && groupId != currentGroup) 0.45f else 1f, tween(400), label = "dim")
                 val order = groupSets.first().exerciseOrder
                 val ex = allExercises[groupSets.first().exerciseId]
                 val dragging = dragKey == groupId
@@ -243,7 +280,9 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
                 } else {
                     Modifier
                 }
-                if (ex != null) Box(itemModifier) {
+                if (ex != null && allDone && groupId !in reopened && dragKey == null) Box(itemModifier.alpha(dim)) {
+                    FoldedExercise(ex, groupSets, previous[ex.id].orEmpty()) { reopened += groupId }
+                } else if (ex != null) Box(itemModifier.alpha(dim)) {
                     ExerciseBlock(
                         dragHandle = Modifier.pointerInput(groupId) {
                             detectDragGesturesAfterLongPress(
@@ -259,6 +298,8 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
                         prBest = bestBefore[ex.id] ?: 0.0,
                         formE1rm = formE1rm[ex.id],
                         rest = rest,
+                        finished = finished,
+                        highlight = groupId == currentGroup,
                         now = now,
                         onAddSet = { scope.launch { Actions.addSet(workoutId, order) } },
                         onSwap = { pickerFor = PickerTarget.Swap(order, ex.id) },
@@ -279,6 +320,9 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
                 }
             }
         }
+    }
+    // Rest over: the screen edge glows bronze for a moment, with the horn and a long buzz.
+    BuzzerGlow(finished)
     }
 
     when (val p = pickerFor) {
@@ -370,6 +414,8 @@ private fun ExerciseBlock(
     prBest: Double,
     formE1rm: Double?,
     rest: RestTimer.State?,
+    finished: RestTimer.Finished?,
+    highlight: Boolean,
     now: Long,
     onAddSet: () -> Unit,
     onSwap: () -> Unit,
@@ -381,7 +427,14 @@ private fun ExerciseBlock(
     onPickRest: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
-    SectionCard {
+    val primary = MaterialTheme.colorScheme.primary
+    val shape = MaterialTheme.shapes.medium
+    Column(
+        Modifier.fillMaxWidth()
+            .bentoSurface(if (highlight) primary else glowFor(exercise.name), glowAlpha = if (highlight) 0.20f else 0.10f)
+            .then(if (highlight) Modifier.border(1.dp, primary.copy(alpha = 0.25f), shape) else Modifier)
+            .padding(horizontal = 12.dp, vertical = 14.dp),
+    ) {
         // Long-press anywhere on this header row to pick the exercise up and drag it.
         Row(dragHandle.testTag("exerciseHeader"), verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -390,12 +443,19 @@ private fun ExerciseBlock(
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Text(
-                exercise.name,
-                Modifier.weight(1f).clickable { menu = true },
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            Column(Modifier.weight(1f).clickable { menu = true }) {
+                Text(
+                    exercise.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = if (highlight) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary,
+                )
+                val working = sets.count { it.kind != "W" }
+                Text(
+                    "$working sets" + if (exercise.restSeconds > 0) " · rest ${fmtClock(exercise.restSeconds.toLong())}" else "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Box {
                 TextButton(onClick = { menu = true }) { Text("⋮", style = MaterialTheme.typography.titleLarge) }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -449,6 +509,13 @@ private fun ExerciseBlock(
         }
         var workingNumber = 0
         var workingIndex = 0
+        // Just after the buzzer, the next set to do is outlined for a few seconds.
+        val buzzedIdx = finished?.takeIf { now - it.at < 6_000 }?.let { f -> sets.indexOfFirst { it.id == f.setId } } ?: -1
+        val nextUpId = if (buzzedIdx >= 0) sets.drop(buzzedIdx + 1).firstOrNull { !it.completed }?.id else null
+        val labels = run {
+            var n = 0
+            sets.map { s -> if (s.kind == "W") "W" else { n++; if (s.kind.isNotEmpty()) "$n${s.kind}" else "$n" } }
+        }
         sets.forEachIndexed { i, s ->
             val label = if (s.kind == "W") "W" else { workingNumber++; if (s.kind.isNotEmpty()) "$workingNumber${s.kind}" else "$workingNumber" }
             // Warm-ups aren't matched against last session's working sets.
@@ -456,7 +523,7 @@ private fun ExerciseBlock(
             if (s.kind != "W") workingIndex++
             val above = sets.getOrNull(i - 1)
             key(s.id) {
-                SetRow(exercise, s, label, prev, above, prBest)
+                SetRow(exercise, s, label, prev, above, prBest, isNext = s.id == nextUpId)
                 // Optional effort, asked right after ticking a working set; gone once you move on.
                 val askRpe = s.completed && s.rpe == null && s.kind != "W" &&
                     (exercise.type == ExerciseType.WEIGHT_REPS || exercise.type == ExerciseType.BODYWEIGHT) &&
@@ -464,7 +531,15 @@ private fun ExerciseBlock(
                     now - (s.completedAt ?: 0L) < 10 * 60_000L
                 if (askRpe) RpePrompt(s)
                 if (exercise.restSeconds > 0) {
-                    RestDivider(exercise, s, rest, now, onActiveClick = onOpenTimer, onPlannedClick = onPickRest)
+                    // What comes after this rest, for the shot clock and the buzzer.
+                    val nextIdx = (i + 1 until sets.size).firstOrNull { !sets[it].completed }
+                    val nextLabel = nextIdx?.let { j ->
+                        val n = sets[j]
+                        val kg = (n.weightKg ?: s.weightKg)?.let { Calc.fmt(it) }
+                        val reps = n.reps ?: s.reps ?: targetPlaceholder(n.target).toIntOrNull()
+                        "Set ${labels[j]}" + if (exercise.type == ExerciseType.WEIGHT_REPS && kg != null && reps != null) " · $kg kg × $reps" else ""
+                    }
+                    RestDivider(exercise, s, rest, finished, now, nextLabel, onActiveClick = onOpenTimer, onPlannedClick = onPickRest)
                 }
             }
         }
@@ -491,7 +566,7 @@ private fun fieldLabels(type: String) = when (type) {
 private fun targetPlaceholder(target: String): String = Regex("\\d+(\\.\\d+)?").find(target)?.value ?: ""
 
 @Composable
-private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: WorkoutSet?, above: WorkoutSet?, prBest: Double) {
+private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: WorkoutSet?, above: WorkoutSet?, prBest: Double, isNext: Boolean = false) {
     val dao = Graph.dao
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -533,6 +608,7 @@ private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: Wor
             if (weight.isBlank()) weight = weightHint
             if (second.isBlank()) second = secondHint
             scope.launch { dao.updateSet(build(true, weight, second).copy(completedAt = System.currentTimeMillis())) }
+            thunk(context)
             RestTimer.start(context, exercise.restSeconds, set.id)
         }
     }
@@ -544,9 +620,30 @@ private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: Wor
         scope.launch { dao.updateSet(set.copy(rpe = v)) }
     }
     val done = set.completed
-    val rowColor = if (done) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent
+    val isPr = done && set.kind != "W" && prBest > 0 && setScore(type, set) > prBest
+    // Ticking fills the row with bronze from left to right; a new best gets one soft shimmer.
+    val fill = remember(set.id) { Animatable(if (done) 1f else 0f) }
+    LaunchedEffect(done) { if (done) fill.animateTo(1f, tween(320, easing = FastOutSlowInEasing)) else fill.snapTo(0f) }
+    val wasPr = remember(set.id) { isPr }
+    val shimmer = remember(set.id) { Animatable(0f) }
+    LaunchedEffect(isPr) { if (isPr && !wasPr) { shimmer.snapTo(0f); shimmer.animateTo(1f, tween(1_100, easing = FastOutSlowInEasing)) } }
+    val primary = MaterialTheme.colorScheme.primary
+    Column {
     Row(
-        Modifier.fillMaxWidth().background(rowColor, RoundedCornerShape(10.dp)).padding(vertical = 4.dp),
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .drawBehind {
+                val r = CornerRadius(14.dp.toPx())
+                if (fill.value > 0f) drawRoundRect(primary.copy(alpha = 0.18f), size = Size(size.width * fill.value, size.height), cornerRadius = r)
+                val v = shimmer.value
+                if (v > 0f && v < 1f) {
+                    val band = size.width * 0.35f
+                    val x = -band + (size.width + band) * v
+                    drawRect(Brush.horizontalGradient(listOf(Color.Transparent, primary.copy(alpha = 0.45f), Color.Transparent), startX = x, endX = x + band))
+                }
+            }
+            .then(if (isNext) Modifier.border(1.5.dp, primary, RoundedCornerShape(14.dp)) else Modifier)
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(SetCol)) {
@@ -583,7 +680,6 @@ private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: Wor
             second = secondOf(prev).orEmpty()
             save(weight, second)
         } else Modifier
-        val isPr = done && set.kind != "W" && prBest > 0 && setScore(type, set) > prBest
         if (isPr) {
             Text(
                 "🏆 PR",
@@ -594,14 +690,19 @@ private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: Wor
                 maxLines = 1,
             )
         } else {
-            Text(
-                prev?.let { describeSet(type, it) } ?: if (set.target.isNotEmpty()) "target ${set.target}" else "—",
-                Modifier.weight(1f).then(copyPrev).padding(horizontal = 4.dp, vertical = 10.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            // Beat last time's set: a small bronze ▲.
+            val beat = done && prev != null && set.kind != "W" && setScore(type, set) > setScore(type, prev) + 1e-9
+            Row(Modifier.weight(1f).then(copyPrev).padding(horizontal = 4.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    prev?.let { describeSet(type, it) } ?: if (set.target.isNotEmpty()) "target ${set.target}" else "—",
+                    Modifier.weight(1f, fill = false),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (beat) Text(" ▲", style = MaterialTheme.typography.bodyMedium, color = primary, fontWeight = FontWeight.SemiBold)
+            }
         }
         SetInput(weight, { weight = it; save(it, second) }, weightHint, KgCol, decimal = true, imeAction = ImeAction.Next, done = done)
         Spacer(Modifier.width(ColGap))
@@ -609,8 +710,9 @@ private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: Wor
         Spacer(Modifier.width(ColGap))
         Box(
             Modifier
-                .size(CheckCol, 44.dp)
-                .background(if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(10.dp))
+                .size(CheckCol, 48.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest)
                 .clickable { toggle() },
             contentAlignment = Alignment.Center,
         ) {
@@ -620,6 +722,92 @@ private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: Wor
                 color = if (done) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+    // A new best on a lifted set: say what moved, in one line.
+    if (isPr && type == ExerciseType.WEIGHT_REPS) {
+        Text(
+            "est. 1RM ${Calc.fmt(Calc.round2(prBest))} → ${Calc.fmt(Calc.round2(setScore(type, set)))} kg",
+            Modifier.padding(start = SetCol + 4.dp, bottom = 2.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = primary,
+        )
+    }
+    }
+}
+
+/** One firm buzz when a set is ticked, like a hammer landing. */
+private fun thunk(context: android.content.Context) {
+    runCatching {
+        val v: android.os.Vibrator = if (android.os.Build.VERSION.SDK_INT >= 31) {
+            context.getSystemService(android.os.VibratorManager::class.java).defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as android.os.Vibrator
+        }
+        v.vibrate(
+            if (android.os.Build.VERSION.SDK_INT >= 29) android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_HEAVY_CLICK)
+            else android.os.VibrationEffect.createOneShot(35, 255),
+        )
+    }
+}
+
+/** A finished exercise, folded to one line: what you did and how it compares with last time. */
+@Composable
+private fun FoldedExercise(exercise: Exercise, sets: List<WorkoutSet>, previous: List<WorkoutSet>, onOpen: () -> Unit) {
+    val type = exercise.type
+    val working = sets.filter { it.kind != "W" }
+    val top = working.maxByOrNull { setScore(type, it) }
+    val prevTop = previous.filter { it.kind != "W" }.maxByOrNull { setScore(type, it) }
+    val change = when {
+        top == null || prevTop == null -> null
+        type == ExerciseType.WEIGHT_REPS && (top.weightKg ?: 0.0) > (prevTop.weightKg ?: 0.0) -> "▲ ${Calc.fmt(Calc.round2((top.weightKg ?: 0.0) - (prevTop.weightKg ?: 0.0)))} kg on last time"
+        setScore(type, top) > setScore(type, prevTop) + 1e-9 -> "▲ on last time"
+        setScore(type, top) < setScore(type, prevTop) - 1e-9 -> "lighter than last time"
+        else -> "same as last time"
+    }
+    val primary = MaterialTheme.colorScheme.primary
+    Row(
+        Modifier.fillMaxWidth().bentoSurface(glowFor(exercise.name), onOpen, glowAlpha = 0.08f).padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(exercise.name, style = MaterialTheme.typography.titleMedium)
+            Row {
+                Text(
+                    "${working.size} sets" + (top?.let { " · best ${describeSet(type, it)}" } ?: ""),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                change?.let {
+                    Text(" · $it", style = MaterialTheme.typography.bodySmall, color = if (it.startsWith("▲")) primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        Canvas(Modifier.size(26.dp)) {
+            drawCircle(Color(0xFF332B1F))
+            val w = size.width
+            val path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(w * 0.30f, w * 0.52f); lineTo(w * 0.45f, w * 0.66f); lineTo(w * 0.71f, w * 0.38f)
+            }
+            drawPath(path, primary, style = Stroke(w * 0.1f, cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+        }
+    }
+}
+
+/** The screen edge glows bronze for a moment when rest runs out. */
+@Composable
+private fun BuzzerGlow(finished: RestTimer.Finished?) {
+    val a = remember { Animatable(0f) }
+    LaunchedEffect(finished?.at) {
+        val f = finished ?: return@LaunchedEffect
+        if (System.currentTimeMillis() - f.at > 2_000) return@LaunchedEffect
+        a.snapTo(1f)
+        a.animateTo(0f, tween(1_300, easing = FastOutSlowInEasing))
+    }
+    val primary = MaterialTheme.colorScheme.primary
+    if (a.value > 0f) Canvas(Modifier.fillMaxSize()) {
+        drawRect(primary.copy(alpha = 0.9f * a.value), style = Stroke(4.dp.toPx()))
+        drawRect(primary.copy(alpha = 0.25f * a.value), style = Stroke(28.dp.toPx()))
     }
 }
 
@@ -695,10 +883,11 @@ private fun SetInput(
     imeAction: ImeAction,
     done: Boolean,
 ) {
-    val textStyle = MaterialTheme.typography.titleMedium.copy(
+    // Big and light, readable at arm's length.
+    val textStyle = MaterialTheme.typography.headlineSmall.copy(
         color = MaterialTheme.colorScheme.onSurface,
         textAlign = TextAlign.Center,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Light,
     )
     val boxColor = if (done) MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f) else MaterialTheme.colorScheme.surfaceContainerHighest
     val hintColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
@@ -709,9 +898,9 @@ private fun SetInput(
         textStyle = textStyle,
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         keyboardOptions = KeyboardOptions(keyboardType = if (decimal) KeyboardType.Decimal else KeyboardType.Number, imeAction = imeAction),
-        modifier = Modifier.width(width).height(44.dp),
+        modifier = Modifier.width(width).height(48.dp),
         decorationBox = { inner ->
-            Box(Modifier.fillMaxSize().background(boxColor, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxSize().background(boxColor, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
                 if (value.isEmpty() && placeholder.isNotEmpty()) Text(placeholder, style = textStyle.copy(color = hintColor))
                 inner()
             }
@@ -720,45 +909,35 @@ private fun SetInput(
 }
 
 /**
- * The slim row between sets. Shows the planned rest ("2:00"); after the set above is ticked it
- * becomes a live countdown with a draining gold line. Tap the countdown for −15/+15/Skip.
+ * Between sets. Planned: a slim "1:30" pill. After the set above is ticked: a shot clock, with big
+ * numbers, a draining bar and what's next; the last five seconds count in bronze. When it runs out,
+ * the buzzer: a bronze "TIME" flash (with the horn and a long buzz from the timer service).
  */
 @Composable
 private fun RestDivider(
     exercise: Exercise,
     set: WorkoutSet,
     rest: RestTimer.State?,
+    finished: RestTimer.Finished?,
     now: Long,
+    nextLabel: String?,
     onActiveClick: () -> Unit,
     onPlannedClick: () -> Unit,
 ) {
+    val context = LocalContext.current
     val activeRest = rest?.takeIf { it.setId == set.id }
-    val track = MaterialTheme.colorScheme.outlineVariant
-    val gold = MaterialTheme.colorScheme.primary
-    val remainingMs = activeRest?.let { (it.endAt - now).coerceAtLeast(0) } ?: 0L
-    val fraction = activeRest?.let { (remainingMs / (it.totalSeconds * 1000f)).coerceIn(0f, 1f) } ?: 0f
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(30.dp)
-            .clickable { if (activeRest != null) onActiveClick() else onPlannedClick() },
-        contentAlignment = Alignment.Center,
-    ) {
-        Canvas(Modifier.fillMaxWidth().height(6.dp)) {
-            val y = size.height / 2
-            drawLine(track, Offset(0f, y), Offset(size.width, y), strokeWidth = if (activeRest != null) 6f else 2f, cap = StrokeCap.Round)
-            if (activeRest != null) drawLine(gold, Offset(0f, y), Offset(size.width * fraction, y), strokeWidth = 6f, cap = StrokeCap.Round)
-        }
-        if (activeRest != null) {
-            Surface(shape = RoundedCornerShape(50), color = gold) {
-                Text(
-                    fmtClock((remainingMs + 999) / 1000),
-                    Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    fontWeight = FontWeight.Bold,
-                )
+    val justBuzzed = finished?.takeIf { it.setId == set.id && now - it.at < 2_000 }
+    when {
+        activeRest != null -> ShotClock(activeRest, now, nextLabel, onActiveClick)
+        justBuzzed != null -> BuzzerFlash(justBuzzed, nextLabel)
+        else -> Box(
+            Modifier.fillMaxWidth().height(30.dp).clickable { onPlannedClick() },
+            contentAlignment = Alignment.Center,
+        ) {
+            val track = MaterialTheme.colorScheme.outlineVariant
+            Canvas(Modifier.fillMaxWidth().height(2.dp)) {
+                drawLine(track, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), strokeWidth = 2f, cap = StrokeCap.Round)
             }
-        } else {
             Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
                 Text(
                     fmtClock(exercise.restSeconds.toLong()),
@@ -768,6 +947,71 @@ private fun RestDivider(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ShotClock(r: RestTimer.State, now: Long, nextLabel: String?, onOpen: () -> Unit) {
+    val context = LocalContext.current
+    // Smooth ticking on the phone; in tests the screen's own 4-a-second clock is enough.
+    var frameNow by remember { mutableLongStateOf(now) }
+    if (Motion.animateLists) LaunchedEffect(r.endAt) { while (true) { withFrameMillis { }; frameNow = System.currentTimeMillis() } }
+    val t = maxOf(now, frameNow)
+    val remainingMs = (r.endAt - t).coerceAtLeast(0)
+    val fraction = (remainingMs / (r.totalSeconds * 1000f)).coerceIn(0f, 1f)
+    val secs = (remainingMs + 999) / 1000
+    val hot = secs in 1..5
+    // Each of the last five seconds lands with a small pulse, like a shot clock running out.
+    val withinSecond = (remainingMs % 1000) / 1000f
+    val pulse = if (hot) 1f + 0.12f * withinSecond * withinSecond else 1f
+    val primary = MaterialTheme.colorScheme.primary
+    val shape = RoundedCornerShape(18.dp)
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp)
+            .clip(shape).background(Color(0xFF141413)).border(1.dp, primary.copy(alpha = 0.25f), shape)
+            .clickable { onOpen() }
+            .padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Rest", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            listOf("−15 s" to -15, "+30 s" to 30).forEach { (label, d) ->
+                TextButton(onClick = { RestTimer.adjust(context, d) }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text(label, style = MaterialTheme.typography.labelMedium) }
+            }
+            TextButton(onClick = { RestTimer.stop(context) }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Skip rest", style = MaterialTheme.typography.labelMedium) }
+        }
+        Text(
+            fmtClock(secs),
+            Modifier.align(Alignment.CenterHorizontally).graphicsLayer { scaleX = pulse; scaleY = pulse }.testTag("shotClock"),
+            style = MaterialTheme.typography.displayMedium,
+            color = if (hot) primary else MaterialTheme.colorScheme.onSurface,
+        )
+        Box(Modifier.padding(end = 10.dp, top = 6.dp).fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+            Box(Modifier.fillMaxWidth(fraction).fillMaxHeight().background(primary))
+        }
+        nextLabel?.let {
+            Gap(8)
+            Text("Next: $it", Modifier.align(Alignment.CenterHorizontally), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** The buzzer: a bronze card that says it's time, then fades. */
+@Composable
+private fun BuzzerFlash(f: RestTimer.Finished, nextLabel: String?) {
+    val a = remember(f.at) { Animatable(1f) }
+    LaunchedEffect(f.at) {
+        delay(1_100)
+        a.animateTo(0f, tween(400))
+    }
+    if (a.value <= 0f) return
+    val onPrimary = MaterialTheme.colorScheme.onPrimary
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp).graphicsLayer { alpha = a.value }
+            .clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.primary).padding(vertical = 18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("TIME", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold, color = onPrimary, letterSpacing = 4.sp)
+        nextLabel?.let { Text(it, style = MaterialTheme.typography.titleSmall, color = onPrimary) }
     }
 }
 
@@ -818,6 +1062,25 @@ fun RestTimerDialog(onDismiss: () -> Unit) {
                         restPresets.forEach { s ->
                             OutlinedButton(onClick = { RestTimer.start(context, s, null) }) { Text(fmtClock(s.toLong())) }
                         }
+                    }
+                }
+                Gap(16)
+                // The buzzer: arena horn (default), a beep, or just the buzz.
+                var sound by remember { mutableStateOf(RestTimer.sound) }
+                Muted("When rest ends")
+                Gap(6)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    RestTimer.Sound.entries.forEach { snd ->
+                        FilterChip(
+                            selected = sound == snd,
+                            onClick = {
+                                sound = snd
+                                RestTimer.sound = snd
+                                Graph.scope.launch { Graph.dao.putSetting(com.muir.bear.data.Setting(com.muir.bear.data.Settings.REST_SOUND, snd.id)) }
+                                if (snd == RestTimer.Sound.HORN) com.muir.bear.timer.Buzzer.horn(context)
+                            },
+                            label = { Text(snd.label) },
+                        )
                     }
                 }
                 Gap(8)

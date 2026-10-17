@@ -21,6 +21,7 @@ import com.muir.bear.data.seedIfNeeded
 import com.muir.bear.steps.Steps
 import com.muir.bear.io.DataIO
 import com.muir.bear.reminders.SupplementReminders
+import com.muir.bear.timer.RestTimer
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -72,6 +73,7 @@ class TrainingApp : Application() {
         }
         Steps.scheduleNightly(this)
         Graph.scope.launch { SupplementReminders.reschedule(this@TrainingApp) }
+        Graph.scope.launch { RestTimer.sound = RestTimer.soundFrom(Graph.dao.setting(com.muir.bear.data.Settings.REST_SOUND)) }
     }
 
     private fun createChannels() {

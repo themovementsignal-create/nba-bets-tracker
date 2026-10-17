@@ -7,7 +7,11 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioTrack
 import android.media.ToneGenerator
 import android.os.Build
 import android.os.Handler
@@ -22,6 +26,7 @@ import com.muir.bear.ErrorLog
 import com.muir.bear.MainActivity
 import com.muir.bear.R
 import com.muir.bear.TrainingApp
+import com.muir.bear.domain.Horn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -39,6 +44,16 @@ object RestTimer {
 
     /** True while the app is on screen (set by MainActivity). */
     @Volatile var appVisible: Boolean = false
+
+    /** What plays when rest ends. Saved in Settings (REST_SOUND), loaded at start. */
+    enum class Sound(val id: String, val label: String) { HORN("horn", "Horn"), BEEP("beep", "Beep"), SILENT("silent", "Buzz only") }
+    @Volatile var sound: Sound = Sound.HORN
+    fun soundFrom(saved: String?): Sound = Sound.entries.firstOrNull { it.id == saved } ?: Sound.HORN
+
+    /** The rest that just ran out (for the buzzer flash on the workout screen). */
+    data class Finished(val setId: Long?, val at: Long)
+    private val _lastFinished = MutableStateFlow<Finished?>(null)
+    val lastFinished: StateFlow<Finished?> = _lastFinished
 
     fun start(context: Context, seconds: Int, setId: Long? = null) {
         if (seconds <= 0) return
@@ -64,6 +79,7 @@ object RestTimer {
     }
 
     internal fun finished() {
+        _lastFinished.value = Finished(_state.value?.setId, System.currentTimeMillis())
         _state.value = null
     }
 
@@ -112,10 +128,14 @@ class RestTimerService : Service() {
 
     private fun onFinished() {
         RestTimer.finished()
-        vibrate()
-        if (RestTimer.appVisible) {
-            beep()
-        } else {
+        val sound = RestTimer.sound
+        vibrate(sound)
+        when (sound) {
+            RestTimer.Sound.HORN -> Buzzer.horn(this)
+            RestTimer.Sound.BEEP -> if (RestTimer.appVisible) beep()
+            RestTimer.Sound.SILENT -> {}
+        }
+        if (!RestTimer.appVisible) {
             val nm = getSystemService(NotificationManager::class.java)
             val n = NotificationCompat.Builder(this, TrainingApp.CHANNEL_TIMER_DONE)
                 .setSmallIcon(R.drawable.ic_stat_timer)
@@ -127,6 +147,8 @@ class RestTimerService : Service() {
                 .setTimeoutAfter(60_000)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_ALARM)
+                // The horn (or nothing) plays instead of the channel's own sound.
+                .setSilent(sound != RestTimer.Sound.BEEP)
                 .build()
             runCatching { nm.notify(NOTIF_DONE, n) }
         }
@@ -141,7 +163,7 @@ class RestTimerService : Service() {
         }
     }
 
-    private fun vibrate() {
+    private fun vibrate(sound: RestTimer.Sound) {
         val vibrator: Vibrator = if (Build.VERSION.SDK_INT >= 31) {
             getSystemService(VibratorManager::class.java).defaultVibrator
         } else {
@@ -149,7 +171,9 @@ class RestTimerService : Service() {
             getSystemService(VIBRATOR_SERVICE) as Vibrator
         }
         runCatching {
-            vibrator.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 500, 200, 500, 200, 700), -1))
+            // With the horn: one long buzz alongside it, like the buzzer at the end of a quarter.
+            val pattern = if (sound == RestTimer.Sound.HORN) longArrayOf(0, 1_000) else longArrayOf(0, 500, 200, 500, 200, 700)
+            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
         }
     }
 
@@ -185,5 +209,39 @@ class RestTimerService : Service() {
         private const val NOTIF_RUNNING = 1
         private const val NOTIF_DONE = 2
         private const val BRONZE = 0xFFA8875A.toInt()
+    }
+}
+
+/** Plays the arena horn (see domain/Horn) on the media stream, ducking any music for a moment. */
+object Buzzer {
+    private val samples by lazy { Horn.samples() }
+
+    fun horn(context: Context) {
+        runCatching {
+            val attrs = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+            val am = context.getSystemService(AudioManager::class.java)
+            val focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK).setAudioAttributes(attrs).build()
+            am?.requestAudioFocus(focus)
+            val data = samples
+            val track = AudioTrack.Builder()
+                .setAudioAttributes(attrs)
+                .setAudioFormat(
+                    AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(Horn.SAMPLE_RATE)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build(),
+                )
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .setBufferSizeInBytes(data.size * 2)
+                .build()
+            track.write(data, 0, data.size)
+            track.play()
+            Handler(Looper.getMainLooper()).postDelayed({
+                runCatching { track.stop() }
+                track.release()
+                am?.abandonAudioFocusRequest(focus)
+            }, data.size * 1000L / Horn.SAMPLE_RATE + 300)
+        }.onFailure { ErrorLog.log("TIMER", "Couldn't play the horn", it) }
     }
 }

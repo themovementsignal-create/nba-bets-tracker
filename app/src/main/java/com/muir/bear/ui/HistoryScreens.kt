@@ -50,6 +50,7 @@ import com.muir.bear.domain.Muscles
 import com.muir.bear.domain.Rpe
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 import kotlinx.coroutines.withContext
 
@@ -191,6 +192,7 @@ fun WorkoutDetailScreen(workoutId: Long, nav: Nav) {
     val scope = rememberCoroutineScope()
     val workout by dao.workoutFlow(workoutId).collectAsState(initial = null)
     val sets by dao.setsFlow(workoutId).collectAsState(initial = emptyList())
+    val summaries by dao.workoutSummaries().collectAsState(initial = emptyList())
     var exercises by remember { mutableStateOf<Map<Long, Exercise>>(emptyMap()) }
     var bestBefore by remember { mutableStateOf<Map<Long, Double>>(emptyMap()) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -212,30 +214,75 @@ fun WorkoutDetailScreen(workoutId: Long, nav: Nav) {
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (w != null) item {
-                SectionCard {
-                    Text(fmtDateTime(w.startedAt), style = MaterialTheme.typography.titleMedium)
-                    val dur = (w.endedAt ?: System.currentTimeMillis()) - w.startedAt
-                    Muted("Duration ${fmtMinutes(dur / 60_000)}" + (w.rpe?.let { " · session RPE $it · load ${it * (dur / 60_000)}" } ?: ""))
-                    val done = sets.filter { it.completed }
-                    val volume = done.sumOf { setVolume(exercises[it.exerciseId]?.type ?: ExerciseType.WEIGHT_REPS, it) }
-                    val prCount = done.filter { it.kind != "W" }.groupBy { it.exerciseId }.count { (exId, g) ->
-                        val type = exercises[exId]?.type ?: ExerciseType.WEIGHT_REPS
-                        val bar = bestBefore[exId] ?: -1.0
-                        bar > 0 && g.any { setScore(type, it) > bar }
+            if (w != null) {
+                val dur = (w.endedAt ?: System.currentTimeMillis()) - w.startedAt
+                val done = sets.filter { it.completed }
+                val volume = done.sumOf { setVolume(exercises[it.exerciseId]?.type ?: ExerciseType.WEIGHT_REPS, it) }
+                val prs = done.filter { it.kind != "W" }.groupBy { it.exerciseId }.mapNotNull { (exId, g) ->
+                    val type = exercises[exId]?.type ?: ExerciseType.WEIGHT_REPS
+                    val bar = bestBefore[exId] ?: -1.0
+                    val best = g.maxOf { setScore(type, it) }
+                    if (bar > 0 && best > bar) Triple(exId, bar, best) else null
+                }
+                // Same session last time, to say honestly whether today moved.
+                val lastTime = summaries.map { it.workout }
+                    .filter { it.id != w.id && it.templateId != null && it.templateId == w.templateId && it.startedAt < w.startedAt && it.endedAt != null }
+                    .maxByOrNull { it.startedAt }
+                    ?.let { lt -> summaries.firstOrNull { it.workout.id == lt.id }?.volume }
+                item {
+                    Column(Modifier.padding(horizontal = 4.dp)) {
+                        Muted(fmtDateTime(w.startedAt) + " · " + fmtMinutes(dur / 60_000))
+                        w.rpe?.let { Muted("Session RPE $it · load ${it * (dur / 60_000)}") }
                     }
-                    Gap(8)
-                    Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                        SummaryStat("Volume", fmtVolume(volume))
-                        SummaryStat("Sets", done.size.toString())
-                        SummaryStat("PRs", if (prCount > 0) "🏆 $prCount" else "0")
-                    }
-                    if (w.notes.isNotBlank()) { Gap(4); Text(w.notes) }
-                    if (w.endedAt == null) {
+                }
+                item {
+                    Column(Modifier.fillMaxWidth().bentoSurface(MaterialTheme.colorScheme.primary, glowAlpha = 0.22f).padding(20.dp)) {
+                        CardLabel("Total lifted")
                         Gap(8)
-                        BigButton("Resume workout", onClick = { nav.replace(Screen.Workout(w.id)) })
+                        CountUp(volume, { "%,d".format(it.roundToLong()) }, MaterialTheme.typography.displayLarge, from = 0.0)
+                        val today = w.startedAt.toLocalDate() == java.time.LocalDate.now()
+                        val change = lastTime?.takeIf { it > 0 }?.let { ((volume - it) / it * 100).roundToInt() }
+                        Muted(
+                            (if (today) "kg borne today" else "kg borne") + when {
+                                change == null -> ""
+                                change > 0 -> " · ▲ $change% on last time"
+                                change < 0 -> " · ${-change}% less than last time"
+                                else -> " · same as last time"
+                            },
+                        )
+                    }
+                }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SummaryTile("Sets", done.size.toString(), Modifier.weight(1f))
+                        SummaryTile("PRs", if (prs.isNotEmpty()) "🏆 ${prs.size}" else "0", Modifier.weight(1f))
+                    }
+                }
+                if (prs.isNotEmpty()) item {
+                    SectionCard("What moved") {
+                        prs.forEach { (exId, bar, best) ->
+                            val ex = exercises[exId]
+                            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                                Text(ex?.name ?: "…", Modifier.weight(1f))
+                                Text(
+                                    if (ex?.type == ExerciseType.WEIGHT_REPS) "est. 1RM ${Calc.fmt(Calc.round2(bar))} → ${Calc.fmt(Calc.round2(best))} kg" else "new best",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                        }
+                    }
+                }
+                if (w.notes.isNotBlank() || w.endedAt == null) item {
+                    SectionCard {
+                        if (w.notes.isNotBlank()) Text(w.notes)
+                        if (w.endedAt == null) {
+                            if (w.notes.isNotBlank()) Gap(8)
+                            BigButton("Resume workout", onClick = { nav.replace(Screen.Workout(w.id)) })
+                        }
                     }
                 }
             }
@@ -269,10 +316,11 @@ fun WorkoutDetailScreen(workoutId: Long, nav: Nav) {
 }
 
 @Composable
-private fun SummaryStat(label: String, value: String) {
-    Column {
-        Text(value, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
-        Muted(label)
+private fun SummaryTile(label: String, value: String, modifier: Modifier) {
+    Column(modifier.bentoSurface(glowFor(label)).padding(16.dp)) {
+        CardLabel(label)
+        Gap(6)
+        Text(value, style = MaterialTheme.typography.displaySmall)
     }
 }
 
