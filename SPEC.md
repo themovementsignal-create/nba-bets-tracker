@@ -30,6 +30,7 @@ Kotlin, Jetpack Compose, Material 3, Room (SQLite), Health Connect (Phase 3). Mi
 - [x] Workout screen, game-day feel: ticks fill with bronze and one firm buzz; rest as a shot clock (last 5 s count in bronze); arena-horn buzzer with a TIME flash (horn / beep / buzz only); the current exercise bright, finished ones folded; finish summary that counts up
 - [x] History, PRs, estimated 1RM (Epley), per-exercise progress charts
 - [ ] Import training templates from a CSV or JSON file (preview first; exercises matched by name, new ones added; nothing existing changed)
+- [ ] Supersets and warm-up exercises in templates (set in the template editor or the import file): partners go back to back with the rest after the round; warm-up sets don't count for progress or PRs (database v5)
 - [x] Strong CSV import (I'll attach an export; make the parser tolerant) — tested with sample files; confirm with a real export
 - [x] Export and backup to JSON + CSV via the share sheet; Android Auto Backup on
 - [x] Error log screen showing recent crashes and errors, with a copy button

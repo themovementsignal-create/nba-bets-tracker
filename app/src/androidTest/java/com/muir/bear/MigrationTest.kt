@@ -124,4 +124,26 @@ class MigrationTest {
             assertEquals(0, dao.allHrv().size)
         }
     }
+
+    @Test
+    fun upgradeFromV4KeepsData() {
+        val name = "migration-test-v4.db"
+        createOld(name, 4) { db ->
+            db.execSQL("INSERT INTO exercise (id, name, type, equipment, barId, restSeconds, notes, isCustom, archived, muscles, secondaryMuscles) VALUES (1, 'Face Pull', 'WEIGHT_REPS', 'cable', NULL, 90, '', 0, 0, 'rear_delts', '')")
+            db.execSQL("INSERT INTO template (id, name, kind, sortOrder, notes) VALUES (1, 'Session 2', 'STRENGTH', 0, '')")
+            db.execSQL("INSERT INTO template_exercise (id, templateId, exerciseId, position, sets, target) VALUES (1, 1, 1, 0, 3, '15')")
+            db.execSQL("INSERT INTO workout (id, name, startedAt, endedAt, rpe, notes, source) VALUES (1, 'Session 2', 1000, 5000, 7, '', '')")
+            db.execSQL("INSERT INTO workout_set (id, workoutId, exerciseId, exerciseOrder, setIndex, weightKg, reps, completed, completedAt, kind, target, rpe) VALUES (1, 1, 1, 0, 0, 20.0, 15, 1, 2000, '', '15', NULL)")
+        }
+        openCurrent(name) { db ->
+            val dao = db.dao()
+            val te = dao.allTemplateExercises().single()
+            assertEquals("15", te.target)
+            assertEquals("", te.superset)
+            assertEquals(false, te.warmup)
+            val set = dao.allSets().single()
+            assertEquals(15, set.reps)
+            assertEquals("", set.superset)
+        }
+    }
 }

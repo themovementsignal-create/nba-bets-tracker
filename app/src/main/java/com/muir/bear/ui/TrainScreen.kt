@@ -26,6 +26,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.muir.bear.Graph
@@ -264,6 +266,31 @@ private fun TemplateItemRow(te: TemplateExercise, name: String, onChange: (Templ
                 label = { Text("Target (e.g. 5, 8-10, 30s, 20m)") },
                 singleLine = true,
                 modifier = Modifier.weight(1f),
+            )
+        }
+        // Superset letter and warm-up flag.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Superset", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            HGap(6)
+            listOf("", "A", "B", "C", "D").forEach { letter ->
+                val on = te.superset == letter
+                TextButton(
+                    onClick = { onChange(te.copy(superset = letter, sets = sets.toIntOrNull() ?: te.sets, target = target)) },
+                    contentPadding = PaddingValues(horizontal = 6.dp),
+                ) {
+                    Text(
+                        if (letter.isEmpty()) "–" else letter,
+                        color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+                    )
+                }
+            }
+            Box(Modifier.weight(1f))
+            Text("Warm-up", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            HGap(6)
+            androidx.compose.material3.Switch(
+                checked = te.warmup,
+                onCheckedChange = { onChange(te.copy(warmup = it, sets = sets.toIntOrNull() ?: te.sets, target = target)) },
             )
         }
     }

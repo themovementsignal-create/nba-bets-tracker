@@ -311,6 +311,8 @@ object DataIO {
         val restSeconds: Int,
         /** The file asked for a different rest on an exercise you already have (yours is kept). */
         val fileRestIgnored: Boolean,
+        val superset: String = "",
+        val warmup: Boolean = false,
     )
 
     /** One template as it will be imported; [name] already has "(2)" if the file's name is taken. */
@@ -366,6 +368,8 @@ object DataIO {
                     item.exercise.trim(), ex?.name, ex?.type ?: newType(item), item.sets, item.target,
                     restSeconds = ex?.restSeconds ?: item.restSeconds ?: 120,
                     fileRestIgnored = ex != null && item.restSeconds != null && item.restSeconds != ex.restSeconds,
+                    superset = item.superset,
+                    warmup = item.warmup,
                 )
             })
         }
@@ -401,7 +405,12 @@ object DataIO {
                         created += saved.name
                         saved
                     }
-                    dao.insertTemplateExercise(TemplateExercise(templateId = tid, exerciseId = ex.id, position = pos, sets = item.sets, target = item.target))
+                    dao.insertTemplateExercise(
+                        TemplateExercise(
+                            templateId = tid, exerciseId = ex.id, position = pos, sets = item.sets, target = item.target,
+                            superset = item.superset, warmup = item.warmup,
+                        ),
+                    )
                 }
                 added += name
             }
@@ -411,12 +420,13 @@ object DataIO {
     }
 
     /** A small example file to start from (CSV opens in any spreadsheet app). */
-    const val TEMPLATE_EXAMPLE_CSV = """template,exercise,sets,reps,rest,type,notes
-Session 3 · Full Body,Back Squat,4,5,3:00,,Heavy lower
-,Bench Press,4,6,2:30,,
-,Chin-up,3,6-8,2:00,bodyweight,
-,Plank,3,45s,60,timed,
-Session 4 · Conditioning,Sled Push,4,20m,2:00,distance,
-,Farmer Carry,3,30m,90,distance,
+    const val TEMPLATE_EXAMPLE_CSV = """template,exercise,sets,reps,rest,type,superset,warmup,notes
+Session 3 · Full Body,Dead Hang,2,30s,60,timed,,yes,Heavy lower
+,Back Squat,4,5,3:00,,,,
+,Bench Press,4,6,2:30,,,,
+,Chin-up,3,6-8,90,bodyweight,A,,
+,Plank,3,45s,60,timed,A,,
+Session 4 · Conditioning,Sled Push,4,20m,2:00,distance,,,
+,Farmer Carry,3,30m,90,distance,,,
 """
 }

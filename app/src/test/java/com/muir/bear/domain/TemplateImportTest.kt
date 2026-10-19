@@ -89,7 +89,8 @@ class TemplateImportTest {
                  "per_side": true, "load_kg": null, "rest_s": 30, "warmup": true, "notes": "Left glute soft."},
                 {"order": 3, "name": "Copenhagen Plank", "type": "time", "sets": 3, "seconds": 20, "per_side": true, "rest_s": 45},
                 {"order": 4, "name": "Suitcase Carry", "type": "distance", "sets": 3, "metres": 30, "per_side": true, "rest_s": 60},
-                {"order": 5, "name": "Hamstring Curl", "type": "reps", "sets": 3, "reps_min": 10, "reps_max": 12, "rest_s": 60}
+                {"order": 5, "name": "Hamstring Curl", "type": "reps", "sets": 3, "reps_min": 10, "reps_max": 12, "rest_s": 60, "superset": "A", "warmup": false},
+                {"order": 6, "name": "Seated Calf Raise", "type": "reps", "sets": 3, "reps_min": 12, "reps_max": 12, "rest_s": 60, "superset": "a", "warmup": false}
               ]}
              ]}
             """.trimIndent(),
@@ -98,11 +99,26 @@ class TemplateImportTest {
         val t = r.templates.single()
         assertEquals("A · Lower + Power", t.name)
         assertEquals("Summer Block · Saturday · ~60 min", t.notes)
-        assertEquals(listOf("Supported Hip Airplane", "Trap Bar Deadlift", "Copenhagen Plank", "Suitcase Carry", "Hamstring Curl"), t.items.map { it.exercise })
-        assertEquals(TemplateImport.Item("Supported Hip Airplane", 2, "4/side", 30, null, "Warm-up. Left glute soft."), t.items[0])
+        assertEquals(listOf("Supported Hip Airplane", "Trap Bar Deadlift", "Copenhagen Plank", "Suitcase Carry", "Hamstring Curl", "Seated Calf Raise"), t.items.map { it.exercise })
+        assertEquals(TemplateImport.Item("Supported Hip Airplane", 2, "4/side", 30, null, "Left glute soft.", warmup = true), t.items[0])
         assertEquals(TemplateImport.Item("Trap Bar Deadlift", 3, "5 · 100 kg", 150, null, "Cap at RPE 7. Progression: +5 kg a week."), t.items[1])
         assertEquals(TemplateImport.Item("Copenhagen Plank", 3, "20s/side", 45, TemplateImport.TIMED), t.items[2])
         assertEquals(TemplateImport.Item("Suitcase Carry", 3, "30m/side", 60, TemplateImport.LOAD_DISTANCE), t.items[3])
         assertEquals("10-12", t.items[4].target)
+        assertEquals(listOf("", "", "", "", "A", "A"), t.items.map { it.superset })
+    }
+
+    @Test fun csvSupersetAndWarmup() {
+        val r = TemplateImport.parse(
+            """
+            template,exercise,sets,reps,superset,warmup
+            B,Dead Hang,2,40s,,yes
+            ,Dip,3,6-8,A,
+            ,Face Pull,3,15,a,no
+            """.trimIndent(),
+        )
+        val items = r.templates.single().items
+        assertEquals(listOf(true, false, false), items.map { it.warmup })
+        assertEquals(listOf("", "A", "A"), items.map { it.superset })
     }
 }

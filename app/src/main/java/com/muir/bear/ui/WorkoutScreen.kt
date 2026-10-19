@@ -120,6 +120,9 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
     val finished by RestTimer.lastFinished.collectAsState()
     // Finished exercises fold to one line; tap one to open it again.
     val reopened = remember { mutableStateListOf<Long>() }
+    // In a superset: the set to go to next (no rest between partners). Cleared once it's done.
+    var supersetNext by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(sets) { supersetNext?.let { id -> if (sets.firstOrNull { it.id == id }?.completed != false) supersetNext = null } }
     var allExercises by remember { mutableStateOf<Map<Long, Exercise>>(emptyMap()) }
     LaunchedEffect(exercises) { allExercises = dao.allExercises().associateBy { it.id } }
 
@@ -265,6 +268,22 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
                 shown.firstOrNull { gid -> groupsById.getValue(gid).any { it.id == sid } }
             }
             val currentGroup = restingIn ?: shown.firstOrNull { gid -> groupsById.getValue(gid).any { !it.completed } }
+            // Supersets: exercises sharing a letter are done back to back, resting after the round.
+            val letterOf = shown.associateWith { gid -> groupsById.getValue(gid).first().superset }
+            fun members(letter: String) = shown.filter { letterOf[it] == letter }
+            fun firstOpen(gid: Long) = groupsById.getValue(gid).sortedBy { it.setIndex }.firstOrNull { !it.completed }
+            val currentLetter = currentGroup?.let { letterOf[it] }.orEmpty()
+            // Just after the buzzer: the set to do next (the first exercise of the round in a superset).
+            val buzzNextId = finished?.takeIf { now - it.at < 6_000 }?.setId?.let { sid ->
+                val gid = shown.firstOrNull { g -> groupsById.getValue(g).any { it.id == sid } } ?: return@let null
+                val letter = letterOf[gid].orEmpty()
+                val pool = if (letter.isEmpty()) listOf(gid) else members(letter)
+                if (letter.isEmpty()) {
+                    val own = groupsById.getValue(gid).sortedBy { it.setIndex }
+                    own.drop(own.indexOfFirst { it.id == sid } + 1).firstOrNull { !it.completed }?.id
+                } else pool.firstNotNullOfOrNull { firstOpen(it)?.id }
+            }
+            val highlightSet = supersetNext ?: buzzNextId
             items(shown, key = { it }) { groupId ->
                 val groupSets = groupsById.getValue(groupId)
                 val ids = groupSets.map { it.id }
@@ -273,7 +292,11 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
                     rest?.setId?.let { it in ids } != true &&
                     finished?.let { f -> f.setId?.let { it in ids } == true && now - f.at < 2_500 } != true
                 // While resting, everything but the exercise you're on steps back.
-                val dim by animateFloatAsState(if (rest != null && groupId != currentGroup) 0.45f else 1f, tween(400), label = "dim")
+                val letter = letterOf[groupId].orEmpty()
+                val mates = if (letter.isEmpty()) emptyList() else members(letter)
+                val bright = groupId == currentGroup || (currentLetter.isNotEmpty() && letter == currentLetter)
+                val lastOfRound = mates.isEmpty() || mates.last() == groupId
+                val dim by animateFloatAsState(if (rest != null && !bright) 0.45f else 1f, tween(400), label = "dim")
                 val order = groupSets.first().exerciseOrder
                 val ex = allExercises[groupSets.first().exerciseId]
                 val dragging = dragKey == groupId
@@ -303,7 +326,19 @@ fun WorkoutScreen(workoutId: Long, nav: Nav) {
                         formE1rm = formE1rm[ex.id],
                         rest = rest,
                         finished = finished,
-                        highlight = groupId == currentGroup,
+                        highlight = bright,
+                        superset = letter,
+                        partners = mates.filter { it != groupId }.mapNotNull { allExercises[groupsById.getValue(it).first().exerciseId]?.name },
+                        restAfter = lastOfRound,
+                        highlightSet = highlightSet,
+                        // Rest after the round: next up is the first exercise of the superset again.
+                        roundNextLabel = if (mates.isNotEmpty() && lastOfRound) mates.firstNotNullOfOrNull { g ->
+                            firstOpen(g)?.let { s -> "${allExercises[s.exerciseId]?.name ?: "…"} · set ${s.setIndex + 1}" }
+                        } else null,
+                        onTicked = { _ ->
+                            val next = mates.getOrNull(mates.indexOf(groupId) + 1)
+                            supersetNext = next?.let { firstOpen(it)?.id }
+                        },
                         now = now,
                         onAddSet = { scope.launch { Actions.addSet(workoutId, order) } },
                         onSwap = { pickerFor = PickerTarget.Swap(order, ex.id) },
@@ -420,6 +455,12 @@ private fun ExerciseBlock(
     rest: RestTimer.State?,
     finished: RestTimer.Finished?,
     highlight: Boolean,
+    superset: String,
+    partners: List<String>,
+    restAfter: Boolean,
+    highlightSet: Long?,
+    roundNextLabel: String?,
+    onTicked: (WorkoutSet) -> Unit,
     now: Long,
     onAddSet: () -> Unit,
     onSwap: () -> Unit,
@@ -454,10 +495,17 @@ private fun ExerciseBlock(
                     color = if (highlight) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary,
                 )
                 val working = sets.count { it.kind != "W" }
+                val warmupOnly = sets.isNotEmpty() && sets.all { it.kind == "W" }
                 Text(
-                    "$working sets" + if (exercise.restSeconds > 0) " · rest ${fmtClock(exercise.restSeconds.toLong())}" else "",
+                    (if (warmupOnly) "Warm-up · ${sets.size} sets" else "$working sets") +
+                        if (restAfter && exercise.restSeconds > 0) " · rest ${fmtClock(exercise.restSeconds.toLong())}" else "",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (superset.isNotEmpty()) Text(
+                    "Superset $superset" + if (partners.isNotEmpty()) " · with ${partners.joinToString()}" else "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
             Box {
@@ -514,8 +562,6 @@ private fun ExerciseBlock(
         var workingNumber = 0
         var workingIndex = 0
         // Just after the buzzer, the next set to do is outlined for a few seconds.
-        val buzzedIdx = finished?.takeIf { now - it.at < 6_000 }?.let { f -> sets.indexOfFirst { it.id == f.setId } } ?: -1
-        val nextUpId = if (buzzedIdx >= 0) sets.drop(buzzedIdx + 1).firstOrNull { !it.completed }?.id else null
         val labels = run {
             var n = 0
             sets.map { s -> if (s.kind == "W") "W" else { n++; if (s.kind.isNotEmpty()) "$n${s.kind}" else "$n" } }
@@ -527,14 +573,15 @@ private fun ExerciseBlock(
             if (s.kind != "W") workingIndex++
             val above = sets.getOrNull(i - 1)
             key(s.id) {
-                SetRow(exercise, s, label, prev, above, prBest, isNext = s.id == nextUpId)
+                SetRow(exercise, s, label, prev, above, prBest, isNext = s.id == highlightSet, restAfter = restAfter, onTicked = onTicked)
                 // Optional effort, asked right after ticking a working set; gone once you move on.
                 val askRpe = s.completed && s.rpe == null && s.kind != "W" &&
                     (exercise.type == ExerciseType.WEIGHT_REPS || exercise.type == ExerciseType.BODYWEIGHT) &&
                     sets.getOrNull(i + 1)?.completed != true &&
                     now - (s.completedAt ?: 0L) < 10 * 60_000L
                 if (askRpe) RpePrompt(s)
-                if (exercise.restSeconds > 0) {
+                // In a superset, only the last exercise of the round rests.
+                if (exercise.restSeconds > 0 && restAfter) {
                     // What comes after this rest, for the shot clock and the buzzer.
                     val nextIdx = (i + 1 until sets.size).firstOrNull { !sets[it].completed }
                     val nextLabel = nextIdx?.let { j ->
@@ -543,7 +590,7 @@ private fun ExerciseBlock(
                         val reps = n.reps ?: s.reps ?: targetPlaceholder(n.target).toIntOrNull()
                         "Set ${labels[j]}" + if (exercise.type == ExerciseType.WEIGHT_REPS && kg != null && reps != null) " · $kg kg × $reps" else ""
                     }
-                    RestDivider(exercise, s, rest, finished, now, nextLabel, onActiveClick = onOpenTimer, onPlannedClick = onPickRest)
+                    RestDivider(exercise, s, rest, finished, now, roundNextLabel ?: nextLabel, onActiveClick = onOpenTimer, onPlannedClick = onPickRest)
                 }
             }
         }
@@ -570,7 +617,17 @@ private fun fieldLabels(type: String) = when (type) {
 private fun targetPlaceholder(target: String): String = Regex("\\d+(\\.\\d+)?").find(target)?.value ?: ""
 
 @Composable
-private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: WorkoutSet?, above: WorkoutSet?, prBest: Double, isNext: Boolean = false) {
+private fun SetRow(
+    exercise: Exercise,
+    set: WorkoutSet,
+    label: String,
+    prev: WorkoutSet?,
+    above: WorkoutSet?,
+    prBest: Double,
+    isNext: Boolean = false,
+    restAfter: Boolean = true,
+    onTicked: (WorkoutSet) -> Unit = {},
+) {
     val dao = Graph.dao
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -613,7 +670,8 @@ private fun SetRow(exercise: Exercise, set: WorkoutSet, label: String, prev: Wor
             if (second.isBlank()) second = secondHint
             scope.launch { dao.updateSet(build(true, weight, second).copy(completedAt = System.currentTimeMillis())) }
             thunk(context)
-            RestTimer.start(context, exercise.restSeconds, set.id)
+            // Mid-superset: straight on to the partner exercise; the rest comes after the round.
+            if (restAfter) RestTimer.start(context, exercise.restSeconds, set.id) else onTicked(set)
         }
     }
 
@@ -778,7 +836,7 @@ private fun FoldedExercise(exercise: Exercise, sets: List<WorkoutSet>, previous:
             Text(exercise.name, style = MaterialTheme.typography.titleMedium)
             Row {
                 Text(
-                    "${working.size} sets" + (top?.let { " · best ${describeSet(type, it)}" } ?: ""),
+                    (if (working.isEmpty()) "Warm-up · ${sets.size} sets" else "${working.size} sets") + (top?.let { " · best ${describeSet(type, it)}" } ?: ""),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -11,7 +11,7 @@ package com.muir.bear.domain
  * "reps_max", "seconds", "metres", "per_side", "load_kg", "rest_s", "warmup", "notes",
  * "progression"}]}]}. Load and "per side" go into the target text ("8-10/side · 16 kg").
  *
- * CSV, one row per exercise, with a header: `template,exercise,sets,reps,rest,type,notes`.
+ * CSV, one row per exercise, with a header: `template,exercise,sets,reps,rest,type,superset,warmup,notes`.
  * Only template and exercise are needed; a blank template carries on the one above; "3x8-10" in
  * the sets column means 3 sets of 8–10.
  *
@@ -24,8 +24,20 @@ object TemplateImport {
     const val TIMED = "TIMED"
     const val LOAD_DISTANCE = "LOAD_DISTANCE"
 
-    /** [notes]: coaching notes from the file, kept on a newly added exercise. */
-    data class Item(val exercise: String, val sets: Int, val target: String, val restSeconds: Int?, val type: String?, val notes: String = "")
+    /**
+     * [notes]: coaching notes from the file, kept on a newly added exercise. [superset]: a letter
+     * shared by exercises done back to back ("" = none). [warmup]: prep work, not tracked for progress.
+     */
+    data class Item(
+        val exercise: String,
+        val sets: Int,
+        val target: String,
+        val restSeconds: Int?,
+        val type: String?,
+        val notes: String = "",
+        val superset: String = "",
+        val warmup: Boolean = false,
+    )
     data class Plan(val name: String, val notes: String, val items: List<Item>)
     data class Parsed(val templates: List<Plan>, val problems: List<String>)
 
@@ -68,8 +80,9 @@ object TemplateImport {
                                 target = target(e) ?: fromSets,
                                 restSeconds = restSeconds(str(e["rest"] ?: e["restSeconds"] ?: e["rest_seconds"] ?: e["rest_s"])),
                                 type = type(str(e["type"])),
+                                superset = superset(str(e["superset"] ?: e["group"])),
+                                warmup = yes(e["warmup"] ?: e["warm_up"]),
                                 notes = listOfNotNull(
-                                    "Warm-up.".takeIf { e["warmup"] == true },
                                     str(e["notes"])?.trim()?.takeIf { it.isNotEmpty() },
                                     str(e["progression"])?.trim()?.takeIf { it.isNotEmpty() }?.let { "Progression: $it" },
                                 ).joinToString(" "),
@@ -127,6 +140,8 @@ object TemplateImport {
         val cReps = col("reps", "target", "rep range")
         val cRest = col("rest", "rest seconds", "rest (s)", "rest_seconds")
         val cType = col("type")
+        val cSuperset = col("superset", "group", "superset group")
+        val cWarmup = col("warmup", "warm-up", "warm up")
         val cNotes = col("notes", "note")
         if (cTemplate < 0 || cExercise < 0) {
             return Parsed(emptyList(), listOf("The first row needs at least the columns \"template\" and \"exercise\""))
@@ -145,7 +160,10 @@ object TemplateImport {
             if (ex.isEmpty()) return@forEachIndexed
             if (current !in items) { order += current; items[current] = mutableListOf() }
             val (sets, fromSets) = setsAndTarget(at(cSets))
-            items.getValue(current) += Item(ex, sets, at(cReps).ifEmpty { fromSets }, restSeconds(at(cRest)), type(at(cType)))
+            items.getValue(current) += Item(
+                ex, sets, at(cReps).ifEmpty { fromSets }, restSeconds(at(cRest)), type(at(cType)),
+                superset = superset(at(cSuperset)), warmup = yes(at(cWarmup).ifEmpty { null }),
+            )
             at(cNotes).takeIf { it.isNotEmpty() && notes[current] == null }?.let { notes[current] = it }
         }
         return Parsed(order.map { Plan(it, notes[it].orEmpty(), items.getValue(it)) }, problems)
@@ -172,6 +190,21 @@ object TemplateImport {
     }
 
     // ---------- Field helpers ----------
+
+    /** "a", "A", "Superset B" → "A", "B"; blank, "none" or null → "". */
+    fun superset(raw: String?): String {
+        val s = raw?.trim().orEmpty()
+        if (s.isEmpty() || s.equals("none", true) || s.equals("null", true) || s == "-") return ""
+        return s.removePrefix("superset").removePrefix("Superset").trim().take(3).uppercase()
+    }
+
+    /** true / "yes" / "y" / "x" / "1" / "warm-up" → true. */
+    fun yes(v: Any?): Boolean = when (v) {
+        is Boolean -> v
+        is Double -> v != 0.0
+        is String -> v.trim().lowercase() in setOf("true", "yes", "y", "x", "1", "warmup", "warm-up", "w")
+        else -> false
+    }
 
     /** "4" → 4 sets; "3x8-10" or "3 × 8" → 3 sets with that target; blank → 3. */
     fun setsAndTarget(raw: String?): Pair<Int, String> {

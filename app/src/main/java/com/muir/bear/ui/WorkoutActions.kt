@@ -44,6 +44,9 @@ object Actions {
                 for (i in 0 until te.sets.coerceAtLeast(1)) {
                     sets += WorkoutSet(
                         workoutId = wid, exerciseId = chosen.id, exerciseOrder = order, setIndex = i, target = te.target,
+                        // Warm-up exercises: their sets are warm-ups (not counted for progress or PRs).
+                        kind = if (te.warmup) "W" else "",
+                        superset = te.superset,
                     )
                 }
             }
@@ -64,7 +67,8 @@ object Actions {
         dao.insertSet(
             WorkoutSet(
                 workoutId = workoutId, exerciseId = last.exerciseId, exerciseOrder = exerciseOrder,
-                setIndex = last.setIndex + 1, target = last.target,
+                setIndex = last.setIndex + 1, target = last.target, superset = last.superset,
+                kind = if (group.all { it.kind == "W" }) "W" else "",
             )
         )
     }

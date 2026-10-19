@@ -104,6 +104,10 @@ data class TemplateExercise(
     val sets: Int = 3,
     /** Free text target, e.g. "5", "8-10", "30s", "20m". */
     val target: String = "",
+    /** Superset letter ("A", "B"…): exercises sharing one are done back to back. "" = none. (v5) */
+    @ColumnInfo(defaultValue = "") val superset: String = "",
+    /** Prep work: its sets are warm-ups, not counted for progress or PRs. (v5) */
+    @ColumnInfo(defaultValue = "0") val warmup: Boolean = false,
 )
 
 @Entity(tableName = "workout", indices = [Index("startedAt")])
@@ -142,6 +146,8 @@ data class WorkoutSet(
     val target: String = "",
     /** Optional effort, RPE 6–10 (10 = no reps left in the tank). (v3) */
     val rpe: Double? = null,
+    /** Superset letter copied from the template; "" = none. (v5) */
+    @ColumnInfo(defaultValue = "") val superset: String = "",
 )
 
 /** Basketball, conditioning and NEAT/treadmill sessions. */

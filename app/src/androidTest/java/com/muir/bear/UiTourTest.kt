@@ -401,6 +401,22 @@ class UiTourTest {
         Thread.sleep(1_500)
         scrollTo("Session 3 · Full Body")
         shot("train-imported")
+
+        // The imported session in a workout: warm-up and superset show up, ticking a superset
+        // partner goes straight on (no rest), the last of the round rests.
+        val sessionId = kotlinx.coroutines.runBlocking {
+            com.muir.bear.Graph.dao.allTemplates().first { it.name == "Session 3 · Full Body" }.id
+        }
+        kotlinx.coroutines.runBlocking { com.muir.bear.ui.Actions.startWorkout(sessionId) }
+        scrollTo("Workout in progress")
+        tap("Workout in progress")
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("Warm-up · 2 sets", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        shot("workout-imported-top")
+        scrollTo("Superset A · with Plank")
+        shot("workout-superset")
+        scrollTo("Discard workout")
+        tap("Discard workout")
+        tapInDialog("Discard")
         Log.i("UiTour", "done")
     }
 }

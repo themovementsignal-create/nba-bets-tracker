@@ -152,7 +152,7 @@ fun ImportTemplatesScreen(nav: Nav) {
         }
         item {
             SectionCard("Format") {
-                Muted("CSV: one row per exercise. Only template and exercise are needed; leave template blank to carry on the one above. Sets can be \"4\" or \"3x8-10\"; rest \"90\", \"90s\" or \"2:00\"; type weight, bodyweight, timed or distance.")
+                Muted("CSV: one row per exercise. Only template and exercise are needed; leave template blank to carry on the one above. Sets can be \"4\" or \"3x8-10\"; rest \"90\", \"90s\" or \"2:00\"; type weight, bodyweight, timed or distance; superset a letter (exercises sharing one are done back to back); warmup yes for prep work.")
                 Gap(6)
                 SelectionContainer {
                     Text(
@@ -194,6 +194,15 @@ private fun ReviewTemplate(t: DataIO.PreviewTemplate, included: Boolean, onToggl
                         "${it.sets} × ${it.target.ifBlank { "—" }} · rest ${fmtClock(it.restSeconds.toLong())} · ${typeLabel(it.type)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = dim),
+                    )
+                    val tags = listOfNotNull(
+                        "Warm-up".takeIf { _ -> it.warmup },
+                        it.superset.takeIf { s -> s.isNotEmpty() }?.let { s -> "Superset $s" },
+                    )
+                    if (tags.isNotEmpty()) Text(
+                        tags.joinToString(" · "),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = dim),
                     )
                     if (it.fileRestIgnored) Text(
                         "Keeps your usual rest for this exercise (the file asked for a different one).",
