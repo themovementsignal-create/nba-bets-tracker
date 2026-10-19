@@ -63,6 +63,7 @@ sealed interface Screen {
     data object EditToday : Screen
     data object JumpTest : Screen
     data object Morning : Screen
+    data object ImportTemplates : Screen
 }
 
 enum class Tab(val label: String) { HOME("Today"), TRAIN("Train"), HISTORY("History"), MORE("More") }
@@ -207,5 +208,6 @@ private fun ScreenContent(s: Screen, nav: Nav) {
         Screen.EditToday -> EditTodayScreen(nav)
         Screen.JumpTest -> JumpTestScreen(nav)
         Screen.Morning -> MorningScreen(nav)
+        Screen.ImportTemplates -> ImportTemplatesScreen(nav)
     }
 }

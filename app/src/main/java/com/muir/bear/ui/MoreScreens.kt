@@ -375,6 +375,11 @@ fun DataScreen(nav: Nav) {
             }
         }
         item {
+            SectionCard("Import training templates", onClick = { nav.go(Screen.ImportTemplates) }) {
+                Muted("Add new sessions from a CSV or JSON file (a spreadsheet, or a plan written by an AI chat). Nothing already here is changed.")
+            }
+        }
+        item {
             SectionCard("Restore") {
                 Muted("Replaces ALL current data with a backup file. A safety backup of the current data is made first.")
                 Gap(8)

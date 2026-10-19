@@ -91,6 +91,7 @@ fun TrainScreen(nav: Nav) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 BigButton("Start empty workout", onClick = { if (active != null) confirmReplace = Template(name = "") else start(null) }, secondary = true)
                 BigButton("+ New template", onClick = { newTemplate = true }, secondary = true)
+                BigButton("Import templates (CSV or JSON)", onClick = { nav.go(Screen.ImportTemplates) }, secondary = true)
                 BigButton("Exercise library", onClick = { nav.go(Screen.Exercises) }, secondary = true)
                 BigButton("Plate calculator", onClick = { nav.go(Screen.PlateCalc) }, secondary = true)
             }

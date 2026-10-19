@@ -382,6 +382,18 @@ class UiTourTest {
         tab("Train")
         tap("Main gym")
         shot("train-end")
+
+        // Import templates: the screen, then the example file through the real import path.
+        scrollTo("Import templates (CSV or JSON)")
+        tap("Import templates (CSV or JSON)")
+        waitFor("Choose file…")
+        shot("import-templates")
+        val imported = kotlinx.coroutines.runBlocking { com.muir.bear.io.DataIO.importTemplates(com.muir.bear.io.DataIO.TEMPLATE_EXAMPLE_CSV) }
+        Log.i("UiTour", "imported ${imported.templates} new ${imported.newExercises}")
+        back()
+        Thread.sleep(1_500)
+        scrollTo("Session 3 · Full Body")
+        shot("train-imported")
         Log.i("UiTour", "done")
     }
 }

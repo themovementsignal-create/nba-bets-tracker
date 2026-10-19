@@ -17,6 +17,10 @@ import com.muir.bear.data.Workout
 import com.muir.bear.data.WorkoutSet
 import com.muir.bear.domain.Calc
 import com.muir.bear.domain.StrongCsv
+import com.muir.bear.domain.TemplateImport
+import com.muir.bear.data.Template
+import com.muir.bear.data.TemplateExercise
+import com.muir.bear.data.TemplateKind
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -293,4 +297,84 @@ object DataIO {
         MuscleData.fillMissing()
         return ImportResult(workouts, sets, duplicates, created, parsed.skippedRows, parsed.problems)
     }
+
+    // ---------- Templates from a JSON or CSV file ----------
+
+    data class TemplatePreview(
+        val templates: List<Pair<String, Int>>,
+        val newExercises: List<String>,
+        val problems: List<String>,
+    )
+
+    data class TemplateImportResult(val templates: List<String>, val newExercises: List<String>, val problems: List<String>)
+
+    private suspend fun findExercise(name: String, byKey: Map<String, Exercise>): Exercise? {
+        for (c in candidates(name) + listOf(name.trim().removeSuffix("s"), name.trim().removeSuffix("es"))) {
+            byKey[key(c)]?.let { return it }
+        }
+        return null
+    }
+
+    /** What importing [text] would add, without changing anything. */
+    suspend fun previewTemplates(text: String): TemplatePreview {
+        val parsed = TemplateImport.parse(text)
+        val byKey = Graph.dao.allExercises().associateBy { key(it.name) }
+        val unknown = parsed.templates.flatMap { it.items }.map { it.exercise.trim() }
+            .filter { findExercise(it, byKey) == null }.distinctBy { key(it) }
+        return TemplatePreview(parsed.templates.map { it.name to it.items.size }, unknown, parsed.problems)
+    }
+
+    /**
+     * Adds the templates in [text]. Exercises are matched to the library by name; ones it doesn't
+     * know are added as custom exercises (type from the file, or guessed). Never changes or removes
+     * anything that's already there: a name already in use gets "(2)" added.
+     */
+    suspend fun importTemplates(text: String): TemplateImportResult {
+        val parsed = TemplateImport.parse(text)
+        val dao = Graph.dao
+        val added = mutableListOf<String>()
+        val created = mutableListOf<String>()
+        Graph.db.withTransaction {
+            val byKey = dao.allExercises().associateBy { key(it.name) }.toMutableMap()
+            val existing = dao.allTemplates()
+            val names = existing.map { it.name.lowercase(Locale.ROOT) }.toMutableSet()
+            var order = (existing.maxOfOrNull { it.sortOrder } ?: -1) + 1
+            for (plan in parsed.templates) {
+                var name = plan.name.trim()
+                var n = 2
+                while (name.lowercase(Locale.ROOT) in names) name = "${plan.name.trim()} (${n++})"
+                names += name.lowercase(Locale.ROOT)
+                val tid = dao.insertTemplate(Template(name = name, kind = TemplateKind.STRENGTH, sortOrder = order++, notes = plan.notes))
+                plan.items.forEachIndexed { pos, item ->
+                    val ex = findExercise(item.exercise, byKey) ?: run {
+                        val target = item.target.trim().lowercase(Locale.ROOT)
+                        val type = item.type ?: when {
+                            Regex("^\\d+\\s*(s|sec|secs)$").matches(target) -> ExerciseType.TIMED
+                            Regex("^\\d+\\s*m$").matches(target) -> ExerciseType.LOAD_DISTANCE
+                            else -> inferType(item.exercise, emptyList())
+                        }
+                        val e = Exercise(name = item.exercise.trim(), type = type, isCustom = true, restSeconds = item.restSeconds ?: 120)
+                        val saved = e.copy(id = dao.insertExercise(e))
+                        byKey[key(saved.name)] = saved
+                        created += saved.name
+                        saved
+                    }
+                    dao.insertTemplateExercise(TemplateExercise(templateId = tid, exerciseId = ex.id, position = pos, sets = item.sets, target = item.target))
+                }
+                added += name
+            }
+        }
+        MuscleData.fillMissing()
+        return TemplateImportResult(added, created, parsed.problems)
+    }
+
+    /** A small example file to start from (CSV opens in any spreadsheet app). */
+    const val TEMPLATE_EXAMPLE_CSV = """template,exercise,sets,reps,rest,type,notes
+Session 3 · Full Body,Back Squat,4,5,3:00,,Heavy lower
+,Bench Press,4,6,2:30,,
+,Chin-up,3,6-8,2:00,bodyweight,
+,Plank,3,45s,60,timed,
+Session 4 · Conditioning,Sled Push,4,20m,2:00,distance,
+,Farmer Carry,3,30m,90,distance,
+"""
 }
