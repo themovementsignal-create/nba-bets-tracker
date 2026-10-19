@@ -388,8 +388,15 @@ class UiTourTest {
         tap("Import templates (CSV or JSON)")
         waitFor("Choose file…")
         shot("import-templates")
-        val imported = kotlinx.coroutines.runBlocking { com.muir.bear.io.DataIO.importTemplates(com.muir.bear.io.DataIO.TEMPLATE_EXAMPLE_CSV) }
-        Log.i("UiTour", "imported ${imported.templates} new ${imported.newExercises}")
+        // Hand it the example file as if picked, review it, import.
+        com.muir.bear.ui.TemplateFile.pending.value = com.muir.bear.io.DataIO.TEMPLATE_EXAMPLE_CSV
+        waitFor("Review before importing")
+        shot("import-review")
+        scrollTo("Import 2 templates")
+        shot("import-review-bottom")
+        tap("Import 2 templates")
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("Added:", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        shot("import-done")
         back()
         Thread.sleep(1_500)
         scrollTo("Session 3 · Full Body")

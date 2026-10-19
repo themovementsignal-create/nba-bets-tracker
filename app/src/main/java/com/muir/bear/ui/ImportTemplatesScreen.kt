@@ -2,7 +2,14 @@ package com.muir.bear.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.Checkbox
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextAlign
+import com.muir.bear.data.ExerciseType
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -21,9 +28,17 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.muir.bear.ErrorLog
 import com.muir.bear.io.DataIO
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/** A file's text handed to the import screen from elsewhere (the UI tour uses it; later, "Open with"). */
+object TemplateFile {
+    val pending = MutableStateFlow<String?>(null)
+}
 
 /**
  * Add training templates from a JSON or CSV file: pick it, see what it would add, then import.
@@ -37,6 +52,8 @@ fun ImportTemplatesScreen(nav: Nav) {
     var text by remember { mutableStateOf<String?>(null) }
     var preview by remember { mutableStateOf<DataIO.TemplatePreview?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    // Templates kept ticked in the review (all, to start with).
+    var keep by remember(preview) { mutableStateOf(preview?.templates?.indices?.toSet().orEmpty()) }
 
     fun work(label: String, block: suspend () -> Unit) {
         busy = true
@@ -49,6 +66,13 @@ fun ImportTemplatesScreen(nav: Nav) {
             }
             busy = false
         }
+    }
+
+    val handed by TemplateFile.pending.collectAsState()
+    LaunchedEffect(handed) {
+        val t = handed ?: return@LaunchedEffect
+        TemplateFile.pending.value = null
+        work("Reading the file") { text = t; preview = DataIO.previewTemplates(t); message = null }
     }
 
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -77,23 +101,40 @@ fun ImportTemplatesScreen(nav: Nav) {
             }
         }
         preview?.let { p ->
-            item {
-                SectionCard(if (p.templates.isEmpty()) "Nothing to import" else "This adds") {
-                    p.templates.forEach { (name, count) -> StatLine(name, "$count exercises") }
-                    if (p.newExercises.isNotEmpty()) {
-                        Gap(8)
-                        Muted("New to your library: ${p.newExercises.joinToString()}")
+            if (p.templates.isEmpty()) item {
+                SectionCard("Nothing to import") {
+                    if (p.problems.isEmpty()) Muted("No templates found in that file.")
+                    p.problems.take(8).forEach { Text("· $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                }
+            } else {
+                item {
+                    SectionCard("Review before importing") {
+                        Muted("Check each session reads right. Untick any you don't want. Nothing is saved until you tap Import.")
+                        if (p.newExercises.isNotEmpty()) {
+                            Gap(8)
+                            Text("New to your library: ${p.newExercises.joinToString()}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                        if (p.problems.isNotEmpty()) {
+                            Gap(8)
+                            Muted("Skipped:")
+                            p.problems.take(8).forEach { Text("· $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                        }
                     }
-                    if (p.problems.isNotEmpty()) {
-                        Gap(8)
-                        p.problems.take(8).forEach { Text("· $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                }
+                p.templates.forEachIndexed { ti, t ->
+                    item(key = "review-$ti") {
+                        ReviewTemplate(t, included = ti in keep) { on -> keep = if (on) keep + ti else keep - ti }
                     }
-                    if (p.templates.isNotEmpty()) {
-                        Gap(12)
-                        BigButton("Import ${p.templates.size} template${if (p.templates.size == 1) "" else "s"}", enabled = !busy, onClick = {
+                }
+                item {
+                    BigButton(
+                        if (keep.isEmpty()) "Nothing ticked" else "Import ${keep.size} template${if (keep.size == 1) "" else "s"}",
+                        enabled = !busy && keep.isNotEmpty(),
+                        onClick = {
                             val t = text ?: return@BigButton
+                            val chosen = keep
                             work("Import") {
-                                val r = DataIO.importTemplates(t)
+                                val r = DataIO.importTemplates(t, chosen)
                                 preview = null
                                 text = null
                                 message = buildString {
@@ -102,8 +143,10 @@ fun ImportTemplatesScreen(nav: Nav) {
                                     append("\nThey're on the Train tab. Tap Edit on one to fine-tune it.")
                                 }
                             }
-                        })
-                    }
+                        },
+                    )
+                    Gap(4)
+                    BigButton("Cancel", secondary = true, enabled = !busy, onClick = { preview = null; text = null })
                 }
             }
         }
@@ -125,4 +168,54 @@ fun ImportTemplatesScreen(nav: Nav) {
         if (busy) item { Row { CircularProgressIndicator() } }
         message?.let { item { SectionCard { SelectionContainer { Text(it) } } } }
     }
+}
+
+/** One template from the file, exercise by exercise, as it will be saved. */
+@Composable
+private fun ReviewTemplate(t: DataIO.PreviewTemplate, included: Boolean, onToggle: (Boolean) -> Unit) {
+    val dim = if (included) 1f else 0.45f
+    SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = included, onCheckedChange = onToggle)
+            HGap(4)
+            Column(Modifier.weight(1f)) {
+                Text(t.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = dim))
+                Muted("${t.items.size} exercises" + if (t.name != t.fileName.trim()) " · renamed: \"${t.fileName.trim()}\" already exists" else "")
+            }
+        }
+        if (t.notes.isNotBlank()) { Gap(4); Muted(t.notes) }
+        Gap(8)
+        t.items.forEachIndexed { i, it ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.Top) {
+                Text("${i + 1}", Modifier.width(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = dim))
+                Column(Modifier.weight(1f)) {
+                    Text(it.name, color = MaterialTheme.colorScheme.onSurface.copy(alpha = dim))
+                    Text(
+                        "${it.sets} × ${it.target.ifBlank { "—" }} · rest ${fmtClock(it.restSeconds.toLong())} · ${typeLabel(it.type)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = dim),
+                    )
+                    if (it.fileRestIgnored) Text(
+                        "Keeps your usual rest for this exercise (the file asked for a different one).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f * dim),
+                    )
+                }
+                HGap(8)
+                val (tag, color) = when {
+                    it.matched == null -> "New" to MaterialTheme.colorScheme.primary
+                    it.matched.equals(it.name, ignoreCase = true) -> "In library" to MaterialTheme.colorScheme.onSurfaceVariant
+                    else -> "= ${it.matched}" to MaterialTheme.colorScheme.onSurfaceVariant
+                }
+                Text(tag, style = MaterialTheme.typography.labelMedium, color = color.copy(alpha = dim), textAlign = TextAlign.End, modifier = Modifier.widthIn(max = 140.dp))
+            }
+        }
+    }
+}
+
+private fun typeLabel(type: String) = when (type) {
+    ExerciseType.BODYWEIGHT -> "bodyweight"
+    ExerciseType.TIMED -> "timed hold"
+    ExerciseType.LOAD_DISTANCE -> "load × distance"
+    else -> "weight × reps"
 }

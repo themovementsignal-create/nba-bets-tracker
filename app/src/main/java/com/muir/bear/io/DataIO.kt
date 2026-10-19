@@ -300,8 +300,24 @@ object DataIO {
 
     // ---------- Templates from a JSON or CSV file ----------
 
+    /** One exercise as it will be imported: [matched] is the library exercise it maps to, or null if new. */
+    data class PreviewItem(
+        val name: String,
+        val matched: String?,
+        val type: String,
+        val sets: Int,
+        val target: String,
+        /** The rest that will apply: your library's for a matched exercise, else the file's (or 2:00). */
+        val restSeconds: Int,
+        /** The file asked for a different rest on an exercise you already have (yours is kept). */
+        val fileRestIgnored: Boolean,
+    )
+
+    /** One template as it will be imported; [name] already has "(2)" if the file's name is taken. */
+    data class PreviewTemplate(val fileName: String, val name: String, val notes: String, val items: List<PreviewItem>)
+
     data class TemplatePreview(
-        val templates: List<Pair<String, Int>>,
+        val templates: List<PreviewTemplate>,
         val newExercises: List<String>,
         val problems: List<String>,
     )
@@ -315,13 +331,46 @@ object DataIO {
         return null
     }
 
-    /** What importing [text] would add, without changing anything. */
+    /** The type a new exercise gets: from the file, else guessed from its target and name. */
+    private fun newType(item: TemplateImport.Item): String {
+        val target = item.target.trim().lowercase(Locale.ROOT)
+        return item.type ?: when {
+            Regex("^\\d+\\s*(s|sec|secs)$").matches(target) -> ExerciseType.TIMED
+            Regex("^\\d+\\s*m$").matches(target) -> ExerciseType.LOAD_DISTANCE
+            else -> inferType(item.exercise, emptyList())
+        }
+    }
+
+    /** Unique template names, adding "(2)", "(3)"… where one is already taken. */
+    private fun uniqueNames(wanted: List<String>, taken: Collection<String>): List<String> {
+        val names = taken.map { it.lowercase(Locale.ROOT) }.toMutableSet()
+        return wanted.map { w ->
+            var name = w.trim()
+            var n = 2
+            while (name.lowercase(Locale.ROOT) in names) name = "${w.trim()} (${n++})"
+            names += name.lowercase(Locale.ROOT)
+            name
+        }
+    }
+
+    /** Exactly what importing [text] would add, without changing anything. */
     suspend fun previewTemplates(text: String): TemplatePreview {
         val parsed = TemplateImport.parse(text)
-        val byKey = Graph.dao.allExercises().associateBy { key(it.name) }
-        val unknown = parsed.templates.flatMap { it.items }.map { it.exercise.trim() }
-            .filter { findExercise(it, byKey) == null }.distinctBy { key(it) }
-        return TemplatePreview(parsed.templates.map { it.name to it.items.size }, unknown, parsed.problems)
+        val dao = Graph.dao
+        val byKey = dao.allExercises().associateBy { key(it.name) }
+        val names = uniqueNames(parsed.templates.map { it.name }, dao.allTemplates().map { it.name })
+        val templates = parsed.templates.mapIndexed { i, plan ->
+            PreviewTemplate(plan.name, names[i], plan.notes, plan.items.map { item ->
+                val ex = findExercise(item.exercise, byKey)
+                PreviewItem(
+                    item.exercise.trim(), ex?.name, ex?.type ?: newType(item), item.sets, item.target,
+                    restSeconds = ex?.restSeconds ?: item.restSeconds ?: 120,
+                    fileRestIgnored = ex != null && item.restSeconds != null && item.restSeconds != ex.restSeconds,
+                )
+            })
+        }
+        val unknown = templates.flatMap { it.items }.filter { it.matched == null }.map { it.name }.distinctBy { key(it) }
+        return TemplatePreview(templates, unknown, parsed.problems)
     }
 
     /**
@@ -329,31 +378,24 @@ object DataIO {
      * know are added as custom exercises (type from the file, or guessed). Never changes or removes
      * anything that's already there: a name already in use gets "(2)" added.
      */
-    suspend fun importTemplates(text: String): TemplateImportResult {
-        val parsed = TemplateImport.parse(text)
+    suspend fun importTemplates(text: String, only: Set<Int>? = null): TemplateImportResult {
+        val all = TemplateImport.parse(text)
+        // [only]: indexes of the templates you kept ticked in the review.
+        val parsed = all.copy(templates = all.templates.filterIndexed { i, _ -> only == null || i in only })
         val dao = Graph.dao
         val added = mutableListOf<String>()
         val created = mutableListOf<String>()
         Graph.db.withTransaction {
             val byKey = dao.allExercises().associateBy { key(it.name) }.toMutableMap()
             val existing = dao.allTemplates()
-            val names = existing.map { it.name.lowercase(Locale.ROOT) }.toMutableSet()
+            val unique = uniqueNames(parsed.templates.map { it.name }, existing.map { it.name })
             var order = (existing.maxOfOrNull { it.sortOrder } ?: -1) + 1
-            for (plan in parsed.templates) {
-                var name = plan.name.trim()
-                var n = 2
-                while (name.lowercase(Locale.ROOT) in names) name = "${plan.name.trim()} (${n++})"
-                names += name.lowercase(Locale.ROOT)
+            for ((pi, plan) in parsed.templates.withIndex()) {
+                val name = unique[pi]
                 val tid = dao.insertTemplate(Template(name = name, kind = TemplateKind.STRENGTH, sortOrder = order++, notes = plan.notes))
                 plan.items.forEachIndexed { pos, item ->
                     val ex = findExercise(item.exercise, byKey) ?: run {
-                        val target = item.target.trim().lowercase(Locale.ROOT)
-                        val type = item.type ?: when {
-                            Regex("^\\d+\\s*(s|sec|secs)$").matches(target) -> ExerciseType.TIMED
-                            Regex("^\\d+\\s*m$").matches(target) -> ExerciseType.LOAD_DISTANCE
-                            else -> inferType(item.exercise, emptyList())
-                        }
-                        val e = Exercise(name = item.exercise.trim(), type = type, isCustom = true, restSeconds = item.restSeconds ?: 120)
+                        val e = Exercise(name = item.exercise.trim(), type = newType(item), isCustom = true, restSeconds = item.restSeconds ?: 120)
                         val saved = e.copy(id = dao.insertExercise(e))
                         byKey[key(saved.name)] = saved
                         created += saved.name
