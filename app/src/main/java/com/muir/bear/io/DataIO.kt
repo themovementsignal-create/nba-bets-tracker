@@ -395,7 +395,7 @@ object DataIO {
                 val tid = dao.insertTemplate(Template(name = name, kind = TemplateKind.STRENGTH, sortOrder = order++, notes = plan.notes))
                 plan.items.forEachIndexed { pos, item ->
                     val ex = findExercise(item.exercise, byKey) ?: run {
-                        val e = Exercise(name = item.exercise.trim(), type = newType(item), isCustom = true, restSeconds = item.restSeconds ?: 120)
+                        val e = Exercise(name = item.exercise.trim(), type = newType(item), isCustom = true, restSeconds = item.restSeconds ?: 120, notes = item.notes)
                         val saved = e.copy(id = dao.insertExercise(e))
                         byKey[key(saved.name)] = saved
                         created += saved.name

@@ -6,6 +6,10 @@ package com.muir.bear.domain
  * JSON: `{"templates": [{"name": "Session 3 · Full Body", "notes": "…", "exercises": [
  *   {"name": "Back Squat", "sets": 4, "reps": "5", "rest": "3:00"}, "Plank"]}]}`
  * (a bare list of templates, or a single template object, also works; "target" = "reps").
+ * Also the richer "bear-program/1" shape: {"program": {"name": …}, "routines": [{"name", "day",
+ * "duration_min", "exercises": [{"order", "name", "type": reps|time|distance, "sets", "reps_min",
+ * "reps_max", "seconds", "metres", "per_side", "load_kg", "rest_s", "warmup", "notes",
+ * "progression"}]}]}. Load and "per side" go into the target text ("8-10/side · 16 kg").
  *
  * CSV, one row per exercise, with a header: `template,exercise,sets,reps,rest,type,notes`.
  * Only template and exercise are needed; a blank template carries on the one above; "3x8-10" in
@@ -20,7 +24,8 @@ object TemplateImport {
     const val TIMED = "TIMED"
     const val LOAD_DISTANCE = "LOAD_DISTANCE"
 
-    data class Item(val exercise: String, val sets: Int, val target: String, val restSeconds: Int?, val type: String?)
+    /** [notes]: coaching notes from the file, kept on a newly added exercise. */
+    data class Item(val exercise: String, val sets: Int, val target: String, val restSeconds: Int?, val type: String?, val notes: String = "")
     data class Plan(val name: String, val notes: String, val items: List<Item>)
     data class Parsed(val templates: List<Plan>, val problems: List<String>)
 
@@ -38,14 +43,17 @@ object TemplateImport {
         val problems = mutableListOf<String>()
         val list: List<Any?> = when (root) {
             is List<*> -> root
-            is Map<*, *> -> (root["templates"] ?: root["sessions"] ?: root["workouts"]) as? List<*> ?: listOf(root)
+            is Map<*, *> -> (root["templates"] ?: root["sessions"] ?: root["workouts"] ?: root["routines"] ?: root["days"]) as? List<*> ?: listOf(root)
             else -> emptyList()
         }
+        // A program wrapper ("program": {"name": "Summer Block", …}) names the block in each template's notes.
+        val programName = ((root as? Map<*, *>)?.get("program") as? Map<*, *>)?.let { str(it["name"])?.trim() }
         val plans = list.mapIndexedNotNull { i, raw ->
             val m = raw as? Map<*, *> ?: run { problems += "Template ${i + 1}: not an object"; return@mapIndexedNotNull null }
             val name = str(m["name"] ?: m["title"] ?: m["template"])?.trim().orEmpty()
             if (name.isEmpty()) { problems += "Template ${i + 1}: no name"; return@mapIndexedNotNull null }
-            val exercises = (m["exercises"] ?: m["items"]) as? List<*> ?: emptyList<Any?>()
+            val exercises = ((m["exercises"] ?: m["items"]) as? List<*> ?: emptyList<Any?>())
+                .let { xs -> if (xs.all { (it as? Map<*, *>)?.get("order") is Double }) xs.sortedBy { ((it as Map<*, *>)["order"] as Double) } else xs }
             val items = exercises.mapIndexedNotNull { j, e ->
                 when (e) {
                     is String -> e.trim().takeIf { it.isNotEmpty() }?.let { Item(it, 3, "", null, null) }
@@ -57,9 +65,14 @@ object TemplateImport {
                             Item(
                                 exercise = ex,
                                 sets = sets,
-                                target = str(e["reps"] ?: e["target"])?.trim()?.takeIf { it.isNotEmpty() } ?: fromSets,
-                                restSeconds = restSeconds(str(e["rest"] ?: e["restSeconds"] ?: e["rest_seconds"])),
+                                target = target(e) ?: fromSets,
+                                restSeconds = restSeconds(str(e["rest"] ?: e["restSeconds"] ?: e["rest_seconds"] ?: e["rest_s"])),
                                 type = type(str(e["type"])),
+                                notes = listOfNotNull(
+                                    "Warm-up.".takeIf { e["warmup"] == true },
+                                    str(e["notes"])?.trim()?.takeIf { it.isNotEmpty() },
+                                    str(e["progression"])?.trim()?.takeIf { it.isNotEmpty() }?.let { "Progression: $it" },
+                                ).joinToString(" "),
                             )
                         }
                     }
@@ -67,9 +80,30 @@ object TemplateImport {
                 }
             }
             if (items.isEmpty()) problems += "$name: no exercises"
-            Plan(name, str(m["notes"])?.trim().orEmpty(), items)
+            val duration = str(m["duration_min"] ?: m["duration"])?.trim()?.takeIf { it.isNotEmpty() }?.let { "~$it min" }
+            val notes = listOfNotNull(programName, str(m["day"])?.trim()?.takeIf { it.isNotEmpty() }, duration, str(m["notes"])?.trim()?.takeIf { it.isNotEmpty() })
+            Plan(name, notes.joinToString(" · "), items)
         }.filter { it.items.isNotEmpty() }
         return Parsed(plans, problems)
+    }
+
+    /**
+     * What to aim for in a set: "reps"/"target" as written, else built from reps_min/reps_max,
+     * seconds or metres, with "/side" and the starting load added ("8-10/side · 16 kg").
+     */
+    private fun target(e: Map<*, *>): String? {
+        val written = str(e["reps"] ?: e["target"])?.trim()?.takeIf { it.isNotEmpty() }
+        val lo = str(e["reps_min"]); val hi = str(e["reps_max"])
+        val base = written ?: when {
+            lo != null && hi != null && lo != hi -> "$lo-$hi"
+            lo != null || hi != null -> lo ?: hi
+            e["seconds"] != null -> "${str(e["seconds"])}s"
+            (e["metres"] ?: e["meters"]) != null -> "${str(e["metres"] ?: e["meters"])}m"
+            else -> null
+        } ?: return null
+        val side = if (e["per_side"] == true) "/side" else ""
+        val load = (e["load_kg"] as? Double)?.takeIf { it > 0 }?.let { " · ${str(it)} kg" } ?: ""
+        return base + side + load
     }
 
     private fun str(v: Any?): String? = when (v) {
@@ -159,7 +193,9 @@ object TemplateImport {
 
     fun type(raw: String?): String? = when (raw?.trim()?.lowercase()?.replace('-', '_')?.replace(' ', '_')) {
         null, "" -> null
-        "weight", "weights", "weight_reps", "reps", "strength" -> WEIGHT_REPS
+        "weight", "weights", "weight_reps", "strength" -> WEIGHT_REPS
+        // "reps" alone could be weighted or bodyweight: guessed from the name when added.
+        "reps" -> null
         "bodyweight", "body_weight", "bw" -> BODYWEIGHT
         "timed", "time", "hold", "isometric", "seconds" -> TIMED
         "distance", "load_distance", "carry", "sled" -> LOAD_DISTANCE

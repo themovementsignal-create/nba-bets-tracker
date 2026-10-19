@@ -75,4 +75,34 @@ class TemplateImportTest {
         assertEquals(3 to "", TemplateImport.setsAndTarget(""))
         assertEquals(4 to "6", TemplateImport.setsAndTarget("4 × 6"))
     }
+
+    @Test fun programWithRoutines() {
+        val r = TemplateImport.parse(
+            """
+            {"format": "bear-program/1",
+             "program": {"name": "Summer Block", "weeks": 12},
+             "routines": [
+              {"name": "A · Lower + Power", "day": "Saturday", "duration_min": 60, "exercises": [
+                {"order": 2, "name": "Trap Bar Deadlift", "type": "reps", "sets": 3, "reps_min": 5, "reps_max": 5,
+                 "per_side": false, "load_kg": 100, "rest_s": 150, "notes": "Cap at RPE 7.", "progression": "+5 kg a week."},
+                {"order": 1, "name": "Supported Hip Airplane", "type": "reps", "sets": 2, "reps_min": 4, "reps_max": 4,
+                 "per_side": true, "load_kg": null, "rest_s": 30, "warmup": true, "notes": "Left glute soft."},
+                {"order": 3, "name": "Copenhagen Plank", "type": "time", "sets": 3, "seconds": 20, "per_side": true, "rest_s": 45},
+                {"order": 4, "name": "Suitcase Carry", "type": "distance", "sets": 3, "metres": 30, "per_side": true, "rest_s": 60},
+                {"order": 5, "name": "Hamstring Curl", "type": "reps", "sets": 3, "reps_min": 10, "reps_max": 12, "rest_s": 60}
+              ]}
+             ]}
+            """.trimIndent(),
+        )
+        assertTrue(r.problems.toString(), r.problems.isEmpty())
+        val t = r.templates.single()
+        assertEquals("A · Lower + Power", t.name)
+        assertEquals("Summer Block · Saturday · ~60 min", t.notes)
+        assertEquals(listOf("Supported Hip Airplane", "Trap Bar Deadlift", "Copenhagen Plank", "Suitcase Carry", "Hamstring Curl"), t.items.map { it.exercise })
+        assertEquals(TemplateImport.Item("Supported Hip Airplane", 2, "4/side", 30, null, "Warm-up. Left glute soft."), t.items[0])
+        assertEquals(TemplateImport.Item("Trap Bar Deadlift", 3, "5 · 100 kg", 150, null, "Cap at RPE 7. Progression: +5 kg a week."), t.items[1])
+        assertEquals(TemplateImport.Item("Copenhagen Plank", 3, "20s/side", 45, TemplateImport.TIMED), t.items[2])
+        assertEquals(TemplateImport.Item("Suitcase Carry", 3, "30m/side", 60, TemplateImport.LOAD_DISTANCE), t.items[3])
+        assertEquals("10-12", t.items[4].target)
+    }
 }
