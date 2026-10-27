@@ -161,6 +161,8 @@ data class Activity(
     val notes: String = "",
     /** For conditioning: what was done (Rower, Bike, Sled…). Added in schema v2. */
     @ColumnInfo(defaultValue = "") val kind: String = "",
+    /** NEAT walks: estimated steps the phone didn't count, added to that day's steps. (v6) */
+    @ColumnInfo(defaultValue = "0") val steps: Int = 0,
 )
 
 /** Conditioning options shown in the dropdown. */

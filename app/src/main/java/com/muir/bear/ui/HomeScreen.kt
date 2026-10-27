@@ -105,7 +105,9 @@ fun HomeScreen(nav: Nav) {
     val bodyweights by dao.bodyweights().collectAsState(initial = emptyList())
     val proteins by dao.proteins().collectAsState(initial = emptyList())
     val sleeps by dao.sleeps().collectAsState(initial = emptyList())
-    val steps by dao.dailySteps().collectAsState(initial = emptyList())
+    val phoneSteps by dao.dailySteps().collectAsState(initial = emptyList())
+    // Phone steps plus the estimated steps from treadmill walks it didn't count.
+    val steps = Steps.withNeat(phoneSteps, activities)
     val tracking by SleepTracker.state.collectAsState()
     val checkIns by dao.checkIns().collectAsState(initial = emptyList())
     val niggles by dao.niggles().collectAsState(initial = emptyList())

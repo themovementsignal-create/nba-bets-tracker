@@ -502,6 +502,10 @@ private fun ExerciseBlock(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // The full target (e.g. "8-10/side · 40 kg") once here; rows only have room for the short part.
+                sets.map { it.target.trim() }.filter { it.isNotEmpty() }.distinct().singleOrNull()?.let { t ->
+                    Text("Target $t", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
+                }
                 if (superset.isNotEmpty()) Text(
                     "Superset $superset" + if (partners.isNotEmpty()) " · with ${partners.joinToString()}" else "",
                     style = MaterialTheme.typography.bodySmall,
@@ -643,7 +647,9 @@ private fun SetRow(
     var second by remember(set.id) { mutableStateOf(secondOf(set).orEmpty()) }
 
     // Placeholders: last session's numbers, else the set above in this workout, else the template target.
-    val weightHint = (prev?.weightKg ?: above?.weightKg)?.let { Calc.fmt(it) } ?: if (type == ExerciseType.BODYWEIGHT) "0" else ""
+    // …or the starting load written in the target ("5 · 100 kg").
+    val targetLoad = Regex("(\\d+(?:\\.\\d+)?)\\s*kg").find(set.target)?.groupValues?.get(1)
+    val weightHint = (prev?.weightKg ?: above?.weightKg)?.let { Calc.fmt(it) } ?: targetLoad ?: if (type == ExerciseType.BODYWEIGHT) "0" else ""
     val secondHint = secondOf(prev) ?: secondOf(above) ?: targetPlaceholder(set.target)
 
     fun build(completed: Boolean, w: String, s: String): WorkoutSet {
@@ -755,12 +761,14 @@ private fun SetRow(
             // Beat last time's set: a small bronze ▲.
             val beat = done && prev != null && set.kind != "W" && setScore(type, set) > setScore(type, prev) + 1e-9
             Row(Modifier.weight(1f).then(copyPrev).padding(horizontal = 4.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Last time's set, else the short target ("8-10/side"; the load is in the kg box and the header).
+                val shortTarget = set.target.substringBefore(" · ").trim()
                 Text(
-                    prev?.let { describeSet(type, it) } ?: if (set.target.isNotEmpty()) "target ${set.target}" else "—",
+                    prev?.let { describeSet(type, it) } ?: if (shortTarget.isNotEmpty()) shortTarget else "—",
                     Modifier.weight(1f, fill = false),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = if (prev == null && shortTarget.length > 6) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (beat) Text(" ▲", style = MaterialTheme.typography.bodyMedium, color = primary, fontWeight = FontWeight.SemiBold)

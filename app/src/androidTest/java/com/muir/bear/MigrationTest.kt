@@ -146,4 +146,20 @@ class MigrationTest {
             assertEquals("", set.superset)
         }
     }
+
+    @Test
+    fun upgradeFromV5KeepsData() {
+        val name = "migration-test-v5.db"
+        createOld(name, 5) { db ->
+            db.execSQL("INSERT INTO activity (id, type, startedAt, durationMin, rpe, notes, kind) VALUES (1, 'NEAT', 1000, 45, NULL, '', '')")
+            db.execSQL("INSERT INTO daily_steps (day, steps) VALUES (20000, 6500)")
+        }
+        openCurrent(name) { db ->
+            val dao = db.dao()
+            val a = dao.allActivities().single()
+            assertEquals(45, a.durationMin)
+            assertEquals(0, a.steps)
+            assertEquals(6500, dao.stepsOn(20000)?.steps)
+        }
+    }
 }

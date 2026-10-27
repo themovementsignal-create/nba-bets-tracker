@@ -45,6 +45,7 @@ Kotlin, Jetpack Compose, Material 3, Room (SQLite), Health Connect (Phase 3). Mi
 - [x] Bulletproof wake-up alarm: held by Android itself (rings even if tracking is closed), louder fallbacks, tracking resumes after being closed, alarm checks + test alarm
 - [ ] Morning screen after the alarm (or "Stop · I'm awake"): opens check-in, bodyweight, supplements and HRV on one screen (can be switched off on the Sleep screen)
 - [ ] Pedometer: daily steps from the phone's step counter
+- [ ] NEAT treadmill walks add their steps to the day: estimated from minutes × your pace, minus what the phone counted during the walk (database v6)
 - [x] Morning check-in: sleep, soreness, energy (1–5 each)
 - [x] Niggle log: tap a body map region and side, severity 0–10, notes
 - [x] Bodyweight log with 7-day average; target 98 kg

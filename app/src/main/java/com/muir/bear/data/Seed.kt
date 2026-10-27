@@ -39,6 +39,10 @@ object Settings {
     const val MONTHLY_SESSION_TARGET = "monthly_session_target"
     const val NEAT_WEEKLY_SESSIONS = "neat_weekly_sessions"
     const val NEAT_SESSION_MIN = "neat_session_min"
+    /** Your walking cadence, for estimating NEAT steps the phone didn't count (default 100). */
+    const val NEAT_STEPS_PER_MIN = "neat_steps_per_min"
+    /** Today's phone step count when the NEAT timer started (to see what it counted during the walk). */
+    const val NEAT_TIMER_STEPS0 = "neat_timer_steps0"
     const val ALARM_TIME = "alarm_time"
     const val ALARM_ON = "alarm_on"
     const val ALARM_WINDOW = "alarm_window"

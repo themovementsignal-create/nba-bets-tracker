@@ -105,6 +105,21 @@ object Steps {
         }
     }
 
+    /** Takes a reading now and waits for it (up to ~5 s), so today's count is up to date. */
+    suspend fun sampleNow(context: Context) = kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
+        sampleOnce(context) { if (cont.isActive) cont.resumeWith(Result.success(Unit)) }
+    }
+
+    /** Daily steps with the steps credited for NEAT walks added (what Today and the charts show). */
+    fun withNeat(daily: List<DailySteps>, activities: List<com.muir.bear.data.Activity>): List<DailySteps> {
+        val credited = activities.filter { it.steps > 0 }.map {
+            java.time.Instant.ofEpochMilli(it.startedAt).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay() to it.steps
+        }
+        if (credited.isEmpty()) return daily
+        return com.muir.bear.domain.NeatSteps.totals(daily.map { it.day to it.steps }, credited)
+            .map { (day, steps) -> DailySteps(day, steps) }.sortedByDescending { it.day }
+    }
+
     /** Schedules a reading at 23:58 each night (inexact, battery friendly). */
     fun scheduleNightly(context: Context) {
         val am = context.getSystemService(AlarmManager::class.java) ?: return

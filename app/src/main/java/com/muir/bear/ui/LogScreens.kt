@@ -75,6 +75,7 @@ import com.muir.bear.data.Sleep
 import com.muir.bear.data.Supplement
 import com.muir.bear.data.SupplementLog
 import com.muir.bear.domain.Calc
+import com.muir.bear.domain.NeatSteps
 import com.muir.bear.domain.SuppReminders
 import com.muir.bear.reminders.SupplementReminders
 import androidx.core.app.NotificationManagerCompat
@@ -208,8 +209,13 @@ fun NeatScreen(nav: Nav) {
 
     val steps by dao.dailySteps().collectAsState(initial = emptyList())
     val context = LocalContext.current
+    val perMin = dao.settingFlow(Settings.NEAT_STEPS_PER_MIN).collectAsState(initial = null).value?.toIntOrNull() ?: NeatSteps.DEFAULT_PER_MIN
+    var addSteps by remember { mutableStateOf(true) }
+    var saving by remember { mutableStateOf(false) }
+    val neatToday = neat.filter { it.startedAt.toLocalDate().toEpochDay() == today() }.sumOf { it.steps }
+
     LogScaffold("NEAT · treadmill", nav) {
-        item { StepsCard(steps, Steps.available(context)) }
+        item { StepsCard(Steps.withNeat(steps, activities), Steps.available(context), neatToday) }
         item {
             SectionCard("This week") {
                 Text("${week.size} of $sessionsTarget–${sessionsTarget + 1} sessions · ${week.sumOf { it.durationMin }} min",
@@ -225,20 +231,35 @@ fun NeatScreen(nav: Nav) {
                 if (start != null) {
                     Text(fmtClock((now - start) / 1000), style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold)
                     Gap(8)
-                    BigButton("Stop & save", onClick = {
+                    Muted("About %,d steps so far at your pace".format(NeatSteps.estimate(((now - start) / 60_000).toInt(), perMin)))
+                    Gap(8)
+                    BigButton("Stop & save", enabled = !saving, onClick = {
+                        saving = true
                         scope.launch {
                             val min = ((System.currentTimeMillis() - start) / 60_000).toInt().coerceAtLeast(1)
-                            val id = dao.insertActivity(Activity(type = SessionType.NEAT, startedAt = start, durationMin = min))
+                            // What the phone itself counted during the walk (if it was on you), so only the rest is added.
+                            Steps.sampleNow(context)
+                            val before = dao.setting(Settings.NEAT_TIMER_STEPS0)?.toIntOrNull()
+                            val sameDay = start.toLocalDate().toEpochDay() == today()
+                            val counted = if (before != null && sameDay) (dao.stepsOn(today())?.steps ?: 0) - before else null
+                            val credit = NeatSteps.credit(min, perMin, counted)
+                            val id = dao.insertActivity(Activity(type = SessionType.NEAT, startedAt = start, durationMin = min, steps = credit))
                             Actions.recordGearUsage(SessionType.NEAT, id, start)
                             dao.deleteSetting(Settings.NEAT_TIMER_START)
+                            dao.deleteSetting(Settings.NEAT_TIMER_STEPS0)
+                            saving = false
                         }
                     })
-                    DangerTextButton("Cancel timer") { scope.launch { dao.deleteSetting(Settings.NEAT_TIMER_START) } }
+                    DangerTextButton("Cancel timer") { scope.launch { dao.deleteSetting(Settings.NEAT_TIMER_START); dao.deleteSetting(Settings.NEAT_TIMER_STEPS0) } }
                 } else {
                     BigButton("Start timer", onClick = {
-                        scope.launch { dao.putSetting(Setting(Settings.NEAT_TIMER_START, System.currentTimeMillis().toString())) }
+                        scope.launch {
+                            dao.putSetting(Setting(Settings.NEAT_TIMER_START, System.currentTimeMillis().toString()))
+                            Steps.sampleNow(context)
+                            dao.putSetting(Setting(Settings.NEAT_TIMER_STEPS0, (dao.stepsOn(today())?.steps ?: 0).toString()))
+                        }
                     })
-                    Muted("The timer keeps running even if you close the app.")
+                    Muted("The timer keeps running even if you close the app. When you stop, the steps your phone didn't count (e.g. on the treadmill console) are estimated and added to today.")
                 }
             }
         }
@@ -252,16 +273,30 @@ fun NeatScreen(nav: Nav) {
                         val min = manual.toIntOrNull() ?: return@Button
                         scope.launch {
                             val at = System.currentTimeMillis() - min * 60_000L
-                            val id = dao.insertActivity(Activity(type = SessionType.NEAT, startedAt = at, durationMin = min))
+                            val credit = if (addSteps) NeatSteps.credit(min, perMin, null) else 0
+                            val id = dao.insertActivity(Activity(type = SessionType.NEAT, startedAt = at, durationMin = min, steps = credit))
                             Actions.recordGearUsage(SessionType.NEAT, id, at)
                             manual = ""
                         }
                     }) { Text("Add") }
                 }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Add estimated steps")
+                        Muted("On if your phone wasn't on you, so it didn't count them.")
+                    }
+                    Switch(checked = addSteps, onCheckedChange = { addSteps = it })
+                }
+            }
+        }
+        item {
+            SectionCard("Your walking pace") {
+                Stepper("Steps a minute", perMin, { v -> scope.launch { dao.putSetting(Setting(Settings.NEAT_STEPS_PER_MIN, v.toString())) } }, step = 5, range = 60..160)
+                Muted("About ${NeatSteps.kmh(perMin)} km/h. Used to estimate steps for treadmill walks. To check yours, count steps for 30 seconds and double it.")
             }
         }
         items(neat, key = { it.id }) { a ->
-            DeletableRow("${a.durationMin} min", fmtDateTime(a.startedAt)) {
+            DeletableRow("${a.durationMin} min" + if (a.steps > 0) " · +%,d steps".format(a.steps) else "", fmtDateTime(a.startedAt)) {
                 scope.launch { dao.deleteActivity(a.id); dao.deleteGearUsageForSession(SessionType.NEAT, a.id) }
             }
         }
@@ -338,10 +373,11 @@ fun ActivityScreen(nav: Nav) {
 }
 
 @Composable
-fun StepsCard(steps: List<DailySteps>, sensor: Boolean) {
+fun StepsCard(steps: List<DailySteps>, sensor: Boolean, neatToday: Int = 0) {
     SectionCard("Steps") {
         val today = steps.firstOrNull { it.day == today() }?.steps ?: 0
         Text("%,d today".format(today), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        if (neatToday > 0) Muted("Includes %,d estimated from treadmill walks".format(neatToday))
         val days = (6 downTo 0).map { today() - it }
         val values = days.map { d -> (steps.firstOrNull { it.day == d }?.steps ?: 0).toFloat() }
         Muted("7-day average: %,d".format(values.average().toInt()))
