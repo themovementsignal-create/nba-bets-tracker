@@ -157,6 +157,9 @@ interface TrainingDao {
     @Query("SELECT * FROM workout_set")
     suspend fun allSets(): List<WorkoutSet>
 
+    @Query("SELECT * FROM workout_set WHERE id = :id")
+    suspend fun setById(id: Long): WorkoutSet?
+
     @Insert
     suspend fun insertSet(s: WorkoutSet): Long
 

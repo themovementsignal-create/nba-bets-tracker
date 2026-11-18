@@ -27,6 +27,7 @@ Kotlin, Jetpack Compose, Material 3, Room (SQLite), Health Connect (Phase 3). Mi
   - Session 2, Push/Pull Upper: dead hang, chin-up, horizontal press, row, overhead press, face pull, cable crossover
   - Wednesday: basketball or conditioning
 - [x] Workout screen: last session's numbers beside each set, tap to complete a set, auto rest timer with vibration and notification, plate calculator with configurable bar weights (including trap bar)
+- [x] Timed sets (bike or run intervals, holds) count down their seconds first, then tick themselves and roll straight into the rest, then the next set: 15 s on, rest, 15 s on… with the horn at each change. "Done" ends a set early, "Stop" ends the run.
 - [x] Workout screen, game-day feel: ticks fill with bronze and one firm buzz; rest as a shot clock (last 5 s count in bronze); arena-horn buzzer with a TIME flash (horn / beep / buzz only); the current exercise bright, finished ones folded; finish summary that counts up
 - [x] History, PRs, estimated 1RM (Epley), per-exercise progress charts
 - [ ] Import training templates from a CSV or JSON file (preview first; exercises matched by name, new ones added; nothing existing changed)

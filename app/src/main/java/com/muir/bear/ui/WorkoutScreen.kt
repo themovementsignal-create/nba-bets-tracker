@@ -577,7 +577,10 @@ private fun ExerciseBlock(
             if (s.kind != "W") workingIndex++
             val above = sets.getOrNull(i - 1)
             key(s.id) {
-                SetRow(exercise, s, label, prev, above, prBest, isNext = s.id == highlightSet, restAfter = restAfter, onTicked = onTicked)
+                SetRow(
+                    exercise, s, label, prev, above, prBest, isNext = s.id == highlightSet, restAfter = restAfter, onTicked = onTicked,
+                    followers = sets.drop(i + 1).filter { !it.completed },
+                )
                 // Optional effort, asked right after ticking a working set; gone once you move on.
                 val askRpe = s.completed && s.rpe == null && s.kind != "W" &&
                     (exercise.type == ExerciseType.WEIGHT_REPS || exercise.type == ExerciseType.BODYWEIGHT) &&
@@ -585,7 +588,7 @@ private fun ExerciseBlock(
                     now - (s.completedAt ?: 0L) < 10 * 60_000L
                 if (askRpe) RpePrompt(s)
                 // In a superset, only the last exercise of the round rests.
-                if (exercise.restSeconds > 0 && restAfter) {
+                if (restAfter && (exercise.restSeconds > 0 || rest?.setId == s.id)) {
                     // What comes after this rest, for the shot clock and the buzzer.
                     val nextIdx = (i + 1 until sets.size).firstOrNull { !sets[it].completed }
                     val nextLabel = nextIdx?.let { j ->
@@ -631,6 +634,8 @@ private fun SetRow(
     isNext: Boolean = false,
     restAfter: Boolean = true,
     onTicked: (WorkoutSet) -> Unit = {},
+    /** The sets still to do after this one in the exercise (a timed set's intervals run on into them). */
+    followers: List<WorkoutSet> = emptyList(),
 ) {
     val dao = Graph.dao
     val scope = rememberCoroutineScope()
@@ -667,6 +672,12 @@ private fun SetRow(
     }
 
     fun toggle() {
+        val running = RestTimer.state.value
+        if (!set.completed && running?.work == true && running.setId == set.id) {
+            // Tapped during the "on" countdown: done early, straight to rest.
+            RestTimer.skip(context)
+            return
+        }
         if (set.completed) {
             scope.launch { dao.updateSet(build(false, weight, second).copy(completedAt = null)) }
             if (RestTimer.state.value?.setId == set.id) RestTimer.stop(context)
@@ -674,6 +685,17 @@ private fun SetRow(
             // One tap: empty fields take the previous / target values.
             if (weight.isBlank()) weight = weightHint
             if (second.isBlank()) second = secondHint
+            // Timed set (bike sprint, run, hold): count the seconds down first; when they run out the
+            // set is ticked and the rest starts by itself, then the next set, and so on.
+            val workSecs = Calc.parseNumber(second)?.toInt() ?: 0
+            if (type == ExerciseType.TIMED && restAfter && workSecs > 0) {
+                scope.launch { dao.updateSet(build(false, weight, second)) }
+                thunk(context)
+                val upNext = followers.map { f -> f.id to (f.seconds ?: targetPlaceholder(f.target).toDoubleOrNull()?.toInt() ?: workSecs) }
+                    .filter { it.second > 0 }
+                RestTimer.startWork(context, workSecs, set.id, exercise.restSeconds, upNext)
+                return
+            }
             scope.launch { dao.updateSet(build(true, weight, second).copy(completedAt = System.currentTimeMillis())) }
             thunk(context)
             // Mid-superset: straight on to the partner exercise; the rest comes after the round.
@@ -1043,11 +1065,20 @@ private fun ShotClock(r: RestTimer.State, now: Long, nextLabel: String?, onOpen:
             .padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Rest", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            listOf("−15 s" to -15, "+30 s" to 30).forEach { (label, d) ->
+            Text(
+                if (r.work) "Go" else "Rest", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+                color = if (r.work) primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = if (r.work) FontWeight.SemiBold else null,
+            )
+            if (!r.work) listOf("−15 s" to -15, "+30 s" to 30).forEach { (label, d) ->
                 TextButton(onClick = { RestTimer.adjust(context, d) }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text(label, style = MaterialTheme.typography.labelMedium) }
             }
-            TextButton(onClick = { RestTimer.stop(context) }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Skip rest", style = MaterialTheme.typography.labelMedium) }
+            TextButton(onClick = { RestTimer.skip(context) }, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text(if (r.work) "Done" else "Skip rest", style = MaterialTheme.typography.labelMedium)
+            }
+            if (r.work || r.upNext.isNotEmpty()) {
+                TextButton(onClick = { RestTimer.stop(context) }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Stop", style = MaterialTheme.typography.labelMedium) }
+            }
         }
         Text(
             fmtClock(secs),
@@ -1058,9 +1089,9 @@ private fun ShotClock(r: RestTimer.State, now: Long, nextLabel: String?, onOpen:
         Box(Modifier.padding(end = 10.dp, top = 6.dp).fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
             Box(Modifier.fillMaxWidth(fraction).fillMaxHeight().background(primary))
         }
-        nextLabel?.let {
+        (if (r.work) (if (r.restSeconds > 0) "Then rest ${fmtClock(r.restSeconds.toLong())}" else null) else nextLabel)?.let {
             Gap(8)
-            Text("Next: $it", Modifier.align(Alignment.CenterHorizontally), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(if (r.work) it else "Next: $it", Modifier.align(Alignment.CenterHorizontally), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -1099,7 +1130,7 @@ fun RestTimerDialog(onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
             Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Rest timer", style = MaterialTheme.typography.titleLarge)
+                Text(if (rest?.work == true) "Work" else "Rest timer", style = MaterialTheme.typography.titleLarge)
                 Gap(16)
                 val r = rest
                 if (r != null) {
@@ -1124,7 +1155,7 @@ fun RestTimerDialog(onDismiss: () -> Unit) {
                         FilledTonalButton(onClick = { RestTimer.adjust(context, 15) }, modifier = Modifier.weight(1f).heightIn(min = 56.dp)) { Text("+15s") }
                     }
                     Gap(12)
-                    BigButton("Skip", onClick = { RestTimer.stop(context); onDismiss() })
+                    BigButton(if (r.work) "Done" else "Skip", onClick = { RestTimer.skip(context); if (RestTimer.state.value == null) onDismiss() })
                 } else {
                     Muted("No rest running. Start one:")
                     Gap(12)

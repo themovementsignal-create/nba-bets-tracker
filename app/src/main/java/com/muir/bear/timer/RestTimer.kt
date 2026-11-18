@@ -23,12 +23,14 @@ import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.muir.bear.ErrorLog
+import com.muir.bear.Graph
 import com.muir.bear.MainActivity
 import com.muir.bear.R
 import com.muir.bear.TrainingApp
 import com.muir.bear.domain.Horn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 /**
  * Rest timer shared by the workout screen and a small foreground service. The service keeps the
@@ -36,8 +38,20 @@ import kotlinx.coroutines.flow.StateFlow
  * a notification when the app is in the background).
  */
 object RestTimer {
-    /** [setId] is the set that started the timer (null for a manually started timer). */
-    data class State(val endAt: Long, val totalSeconds: Int, val setId: Long?)
+    /**
+     * [setId] is the set the countdown belongs to (null for a manually started timer).
+     * [work] = the "on" part of a timed set (e.g. 15 s on the bike); when it runs out the set is
+     * ticked and its rest starts by itself. [upNext] holds the timed sets still to do in that
+     * exercise (id to seconds), so work → rest → work runs on without touching the phone.
+     */
+    data class State(
+        val endAt: Long,
+        val totalSeconds: Int,
+        val setId: Long?,
+        val work: Boolean = false,
+        val restSeconds: Int = 0,
+        val upNext: List<Pair<Long, Int>> = emptyList(),
+    )
 
     private val _state = MutableStateFlow<State?>(null)
     val state: StateFlow<State?> = _state
@@ -61,6 +75,30 @@ object RestTimer {
         send(context, RestTimerService.ACTION_START)
     }
 
+    /** Starts the "on" countdown of a timed set; its rest, and the sets in [upNext], follow by themselves. */
+    fun startWork(context: Context, seconds: Int, setId: Long, restSeconds: Int, upNext: List<Pair<Long, Int>>) {
+        if (seconds <= 0) return
+        _state.value = State(System.currentTimeMillis() + seconds * 1000L, seconds, setId, work = true, restSeconds = restSeconds, upNext = upNext)
+        send(context, RestTimerService.ACTION_START)
+    }
+
+    /** What follows [s] when it runs out (or is skipped): work → its rest → the next set's work → … */
+    internal fun after(s: State, now: Long): State? = when {
+        s.work && s.restSeconds > 0 -> s.copy(endAt = now + s.restSeconds * 1000L, totalSeconds = s.restSeconds, work = false)
+        s.upNext.isNotEmpty() -> {
+            val (id, secs) = s.upNext.first()
+            s.copy(endAt = now + secs * 1000L, totalSeconds = secs, setId = id, work = true, upNext = s.upNext.drop(1))
+        }
+        else -> null
+    }
+
+    /** "Done" during work (ticks the set, rest starts) or "Skip rest" (the next set starts, or the timer stops). */
+    fun skip(context: Context) {
+        val s = _state.value ?: return
+        val next = advance(s, flash = false)
+        send(context, if (next != null) RestTimerService.ACTION_START else RestTimerService.ACTION_STOP)
+    }
+
     fun adjust(context: Context, deltaSeconds: Int) {
         val s = _state.value ?: return
         val newEnd = s.endAt + deltaSeconds * 1000L
@@ -78,9 +116,24 @@ object RestTimer {
         send(context, RestTimerService.ACTION_STOP)
     }
 
-    internal fun finished() {
-        _lastFinished.value = Finished(_state.value?.setId, System.currentTimeMillis())
-        _state.value = null
+    /** The countdown ran out: returns what runs next (null = all done). */
+    internal fun finished(): State? = _state.value?.let { advance(it, flash = true) }
+
+    private fun advance(s: State, flash: Boolean): State? {
+        val now = System.currentTimeMillis()
+        if (s.work) s.setId?.let { tick(it, s.totalSeconds, now) }
+        if (flash) _lastFinished.value = Finished(s.setId, now)
+        val next = after(s, now)
+        _state.value = next
+        return next
+    }
+
+    /** Marks a timed set done once its work countdown is over (keeps any numbers already typed in). */
+    private fun tick(setId: Long, seconds: Int, now: Long) {
+        Graph.scope.launch {
+            val set = Graph.dao.setById(setId) ?: return@launch
+            if (!set.completed) Graph.dao.updateSet(set.copy(completed = true, completedAt = now, seconds = set.seconds ?: seconds))
+        }
     }
 
     private fun send(context: Context, action: String) {
@@ -106,18 +159,22 @@ class RestTimerService : Service() {
                 val s = RestTimer.state.value
                 // Always enter the foreground first: Android requires it after startForegroundService.
                 ServiceCompat.startForeground(
-                    this, NOTIF_RUNNING, runningNotification(s?.endAt ?: System.currentTimeMillis()),
+                    this, NOTIF_RUNNING, runningNotification(s),
                     if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0,
                 )
                 if (s == null) {
                     stopNow(); return START_NOT_STICKY
                 }
-                handler.removeCallbacks(finish)
-                handler.postDelayed(finish, (s.endAt - System.currentTimeMillis()).coerceAtLeast(0))
+                schedule(s)
             }
             else -> stopNow()
         }
         return START_NOT_STICKY
+    }
+
+    private fun schedule(s: RestTimer.State) {
+        handler.removeCallbacks(finish)
+        handler.postDelayed(finish, (s.endAt - System.currentTimeMillis()).coerceAtLeast(0))
     }
 
     private fun stopNow() {
@@ -127,13 +184,19 @@ class RestTimerService : Service() {
     }
 
     private fun onFinished() {
-        RestTimer.finished()
+        val next = RestTimer.finished()
         val sound = RestTimer.sound
         vibrate(sound)
         when (sound) {
             RestTimer.Sound.HORN -> Buzzer.horn(this)
             RestTimer.Sound.BEEP -> if (RestTimer.appVisible) beep()
             RestTimer.Sound.SILENT -> {}
+        }
+        if (next != null) {
+            // Work → rest → next set: keep going, with the notification showing the new countdown.
+            runCatching { getSystemService(NotificationManager::class.java).notify(NOTIF_RUNNING, runningNotification(next)) }
+            schedule(next)
+            return
         }
         if (!RestTimer.appVisible) {
             val nm = getSystemService(NotificationManager::class.java)
@@ -177,14 +240,14 @@ class RestTimerService : Service() {
         }
     }
 
-    private fun runningNotification(endAt: Long): Notification =
+    private fun runningNotification(s: RestTimer.State?): Notification =
         NotificationCompat.Builder(this, TrainingApp.CHANNEL_TIMER)
             .setSmallIcon(R.drawable.ic_stat_timer)
             .setColor(BRONZE)
-            .setContentTitle("Resting")
+            .setContentTitle(if (s?.work == true) "Work" else "Resting")
             .setUsesChronometer(true)
             .setChronometerCountDown(true)
-            .setWhen(endAt)
+            .setWhen(s?.endAt ?: System.currentTimeMillis())
             .setShowWhen(true)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
