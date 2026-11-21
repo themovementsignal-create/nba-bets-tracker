@@ -55,7 +55,7 @@ object Actions {
         wid
     }
 
-    suspend fun addExercise(workoutId: Long, exercise: Exercise, sets: Int = 3) {
+    suspend fun addExercise(workoutId: Long, exercise: Exercise, sets: Int = if (exercise.type == ExerciseType.FLOORS) 1 else 3) {
         val existing = dao.sets(workoutId)
         val order = (existing.maxOfOrNull { it.exerciseOrder } ?: -1) + 1
         dao.insertSets((0 until sets).map { WorkoutSet(workoutId = workoutId, exerciseId = exercise.id, exerciseOrder = order, setIndex = it) })

@@ -80,6 +80,8 @@ object Settings {
     const val FUEL_PHASE = "fuel_phase"
     const val FUEL_PHASE_START = "fuel_phase_start"
     const val FUEL_PHASE_END = "fuel_phase_end"
+    /** ISO date Fuel was first set up; earlier days aren't scored. */
+    const val FUEL_SINCE = "fuel_since"
 
     const val DEFAULT_PLATES = "25,20,15,10,5,2.5,1.25"
 }
@@ -308,6 +310,7 @@ suspend fun seedFuel(db: AppDatabase) {
                 FoodItem(name = "Paul's protein smoothie", portion = "1 smoothie", category = T, kcal = 272, proteinG = 30.0),
             ).forEachIndexed { i, f -> dao.insertFoodItem(f.copy(position = i)) }
         }
+        if (dao.setting(Settings.FUEL_SINCE) == null) dao.putSetting(Setting(Settings.FUEL_SINCE, LocalDate.now().toString()))
         dao.putSetting(Setting("data_fuel", "1"))
     }
 }

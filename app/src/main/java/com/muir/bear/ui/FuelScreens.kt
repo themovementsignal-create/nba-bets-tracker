@@ -166,7 +166,11 @@ fun FuelWeekScreen(nav: Nav) {
     val trained = FuelStore.trainingDays(workouts, activities)
     val live = rules.filter { it.enabled }
     val today = LocalDate.now()
-    val shown = days.filter { !it.isAfter(today) }
+    // Days before Fuel was set up (and future days) stay blank.
+    val since = dao.settingFlow(Settings.FUEL_SINCE).collectAsState(initial = null).value
+        ?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: today
+    fun counts(d: LocalDate) = !d.isAfter(today) && !d.isBefore(since)
+    val shown = days.filter(::counts)
     val scores = shown.associateWith { d -> FuelStore.score(live, checks.filter { it.date == FuelStore.iso(d) }, d in trained) }
 
     LogScaffold("Fuel", nav) {
@@ -198,7 +202,7 @@ fun FuelWeekScreen(nav: Nav) {
                         Text(r.label, Modifier.weight(1f).padding(end = 6.dp), style = MaterialTheme.typography.bodySmall, maxLines = 2)
                         days.forEach { d ->
                             Box(Modifier.width(CellW), contentAlignment = Alignment.Center) {
-                                if (!d.isAfter(today)) {
+                                if (counts(d)) {
                                     val c = checks.firstOrNull { it.date == FuelStore.iso(d) && it.ruleId == r.id }?.let(FuelStore::checkIn)
                                     val rin = FuelStore.ruleIn(r)
                                     if (FuelScore.applies(rin, c, d in trained)) TickBox(FuelScore.isHit(rin, c), size = 14)
