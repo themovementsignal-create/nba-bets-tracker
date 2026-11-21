@@ -351,6 +351,7 @@ fun HomeScreen(nav: Nav) {
                         }
                     }
                 }
+                Dashboard.Item.FUEL -> item { FuelCard(nav) }
                 Dashboard.Item.LIFTS -> item { KeyLiftsCard(liftsSetting, workouts.size, nav) }
                 Dashboard.Item.MONTH -> item {
                     SectionCard("Sessions this month") {

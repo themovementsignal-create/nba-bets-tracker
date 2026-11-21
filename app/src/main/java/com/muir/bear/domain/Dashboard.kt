@@ -10,6 +10,7 @@ object Dashboard {
         READINESS("readiness", "Readiness"),
         NEXT("next", "Next session"),
         TICKS("ticks", "Daily ticks"),
+        FUEL("fuel", "Fuel"),
         SLEEP("sleep", "Sleep"),
         STEPS("steps", "Steps & NEAT"),
         HRV("hrv", "HRV"),

@@ -124,6 +124,8 @@ object Actions {
             dao.updateWorkout(w.copy(endedAt = now, rpe = rpe, notes = notes))
             recordGearUsage(SessionType.STRENGTH, workoutId, now)
         }
+        // Fuel: "Shake after training" ticks itself (unless you've set it by hand today).
+        com.muir.bear.fuel.FuelStore.onWorkoutFinished()
     }
 
     suspend fun discardWorkout(workoutId: Long) = deleteWorkout(workoutId)
