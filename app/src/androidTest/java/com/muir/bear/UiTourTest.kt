@@ -343,6 +343,19 @@ class UiTourTest {
         shot("home-fuel")
         openFromMore("Fuel", "fuel-week") {
             waitFor("Score", timeout = 5_000)
+            scrollTo("Snack list")
+            tap("Snack list")
+            waitFor("Biltong")
+            shot("snack-list")
+            compose.onAllNodesWithText("Log")[0].performClick()
+            waitFor("Logged ✓")
+            shot("snack-logged")
+            back()
+            scrollTo("Fuel settings")
+            tap("Fuel settings")
+            waitFor("Prompt me")
+            shot("fuel-settings")
+            back()
         }
         openFromMore("Insights", "insights") {
             waitFor("Hard sets per muscle")

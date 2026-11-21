@@ -51,6 +51,7 @@ Kotlin, Jetpack Compose, Material 3, Room (SQLite), Health Connect (Phase 3). Mi
 - [x] Bodyweight log with 7-day average; target 98 kg
 - [x] Protein quick tally with presets; target 160–175 g/day
 - [x] Daily supplement checklist (editable list)
+- [ ] Fuel: six daily food rules on a Today card (fruit as a 0–2 stepper, chips ticked unless unticked, shake ticks itself after a workout and drops out on rest days), goal "5 of 6 most days", week view, editable snack list (favourite, reorder, archive), afternoon snack prompt with Log it / Something else / Skip today (weekday and weekend times), Settings → Fuel (rules, prompt, Maintenance/Cut phase). Not a calorie counter; items carry optional kcal and protein for later (database v8)
 - [ ] Supplement reminders: a daily time per supplement and a one-off "remind me in…" timer; the notification lists what's left, with Taken and In 30 min buttons
 
 ## Phase 3: Data and dashboard

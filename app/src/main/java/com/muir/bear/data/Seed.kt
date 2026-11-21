@@ -70,6 +70,17 @@ object Settings {
     /** Epoch day before which the review reminder stays hidden ("remind me next week"). */
     const val PROGRAM_REVIEW_SNOOZE = "program_review_snooze"
 
+    /** Fuel snack prompt: "1" on (default), "0" off; times in minutes after midnight (default 15:30). */
+    const val FUEL_PROMPT_ON = "fuel_prompt_on"
+    const val FUEL_PROMPT_WEEKDAY = "fuel_prompt_weekday"
+    const val FUEL_PROMPT_WEEKEND = "fuel_prompt_weekend"
+    /** ISO date "Skip today" was pressed. */
+    const val FUEL_SKIP_DAY = "fuel_skip_day"
+    /** Fuel phase: "MAINTENANCE" (default) or "CUT", with optional ISO start and end dates. */
+    const val FUEL_PHASE = "fuel_phase"
+    const val FUEL_PHASE_START = "fuel_phase_start"
+    const val FUEL_PHASE_END = "fuel_phase_end"
+
     const val DEFAULT_PLATES = "25,20,15,10,5,2.5,1.25"
 }
 

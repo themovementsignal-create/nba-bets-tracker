@@ -90,3 +90,32 @@ object SnackPicker {
         return weighted[Random(seed).nextInt(weighted.size)]
     }
 }
+
+/** When the afternoon snack prompt fires next. Times are minutes after midnight. */
+object SnackPrompt {
+    const val DEFAULT_MINUTE = 15 * 60 + 30
+
+    /**
+     * The next prompt strictly after [now]: today's time if it's still ahead and today isn't done
+     * (a snack logged, or "Skip today"), otherwise the next day's. Weekends have their own time.
+     */
+    fun next(now: java.time.LocalDateTime, weekdayMinute: Int, weekendMinute: Int, doneToday: Boolean): java.time.LocalDateTime {
+        for (offset in 0L..7L) {
+            if (offset == 0L && doneToday) continue
+            val day = now.toLocalDate().plusDays(offset)
+            val weekend = day.dayOfWeek == java.time.DayOfWeek.SATURDAY || day.dayOfWeek == java.time.DayOfWeek.SUNDAY
+            val m = (if (weekend) weekendMinute else weekdayMinute).coerceIn(0, 24 * 60 - 1)
+            val at = day.atTime(m / 60, m % 60)
+            if (at.isAfter(now)) return at
+        }
+        return now.toLocalDate().plusDays(1).atTime(weekdayMinute / 60, weekdayMinute % 60)
+    }
+
+    fun parse(saved: String?): Int = saved?.toIntOrNull()?.takeIf { it in 0 until 24 * 60 } ?: DEFAULT_MINUTE
+
+    fun fmt(minute: Int): String = "%02d:%02d".format(minute / 60, minute % 60)
+
+    /** "Afternoon snack: Biltong, 50 g. Log it?" (names as you wrote them: brands keep their capitals) */
+    fun text(name: String, portion: String): String =
+        "Afternoon snack: $name${if (portion.isBlank()) "" else ", $portion"}. Log it?"
+}

@@ -100,6 +100,10 @@
             android:name=".reminders.SupplementReminderReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".fuel.FuelPromptReceiver"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.files"

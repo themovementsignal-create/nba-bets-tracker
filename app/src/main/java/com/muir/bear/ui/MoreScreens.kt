@@ -217,6 +217,12 @@ fun SettingsScreen(nav: Nav) {
         item { SettingField("Sleep need (hours a night)", Settings.SLEEP_NEED, "8") }
         item { SettingField("Review program every (weeks)", Settings.PROGRAM_REVIEW_WEEKS, ProgramReview.DEFAULT_WEEKS.toString()) }
         item { ProgramBlockRow() }
+        item {
+            TextButton(onClick = { nav.go(Screen.FuelSettings) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Fuel: rules, snack prompt, phase", Modifier.weight(1f))
+                Text("›")
+            }
+        }
         item { Muted("Units are fixed: kg, km/m, °C.") }
     }
 }

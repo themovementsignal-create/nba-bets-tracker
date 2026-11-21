@@ -65,6 +65,8 @@ sealed interface Screen {
     data object Morning : Screen
     data object ImportTemplates : Screen
     data object Fuel : Screen
+    data object Snacks : Screen
+    data object FuelSettings : Screen
 }
 
 enum class Tab(val label: String) { HOME("Today"), TRAIN("Train"), HISTORY("History"), MORE("More") }
@@ -132,6 +134,11 @@ fun AppRoot() {
             "supplements" -> {
                 MainActivity.openRequest.value = null
                 if (nav.stack.lastOrNull() != Screen.Supplements) nav.go(Screen.Supplements)
+            }
+            // "Something else" on the snack prompt.
+            "snacks" -> {
+                MainActivity.openRequest.value = null
+                if (nav.stack.lastOrNull() != Screen.Snacks) nav.go(Screen.Snacks)
             }
             // Just turned the alarm off, or stopped tracking: your morning check-ins (unless switched off).
             "morning" -> {
@@ -211,5 +218,7 @@ private fun ScreenContent(s: Screen, nav: Nav) {
         Screen.Morning -> MorningScreen(nav)
         Screen.ImportTemplates -> ImportTemplatesScreen(nav)
         Screen.Fuel -> FuelWeekScreen(nav)
+        Screen.Snacks -> SnackListScreen(nav)
+        Screen.FuelSettings -> FuelSettingsScreen(nav)
     }
 }

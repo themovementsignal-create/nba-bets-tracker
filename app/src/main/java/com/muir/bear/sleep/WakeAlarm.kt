@@ -178,7 +178,10 @@ class AlarmBootReceiver : BroadcastReceiver() {
         if (WakeAlarm.isUnlocked(context)) {
             val pending = goAsync()
             Graph.scope.launch {
-                try { com.muir.bear.reminders.SupplementReminders.reschedule(context.applicationContext) } finally { pending.finish() }
+                try {
+                    com.muir.bear.reminders.SupplementReminders.reschedule(context.applicationContext)
+                    com.muir.bear.fuel.FuelPrompt.reschedule(context.applicationContext)
+                } finally { pending.finish() }
             }
         }
     }

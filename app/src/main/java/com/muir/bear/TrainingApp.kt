@@ -77,6 +77,7 @@ class TrainingApp : Application() {
         }
         Steps.scheduleNightly(this)
         Graph.scope.launch { SupplementReminders.reschedule(this@TrainingApp) }
+        Graph.scope.launch { com.muir.bear.fuel.FuelPrompt.reschedule(this@TrainingApp) }
         Graph.scope.launch { RestTimer.sound = RestTimer.soundFrom(Graph.dao.setting(com.muir.bear.data.Settings.REST_SOUND)) }
     }
 
@@ -104,6 +105,9 @@ class TrainingApp : Application() {
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_SUPPS, "Supplement reminders", NotificationManager.IMPORTANCE_HIGH)
         )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_FUEL, "Afternoon snack prompt", NotificationManager.IMPORTANCE_DEFAULT)
+        )
         // Only used if sleep tracking died overnight: this one makes the alarm sound itself.
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_SLEEP_BACKUP, "Wake-up alarm (backup)", NotificationManager.IMPORTANCE_HIGH).apply {
@@ -121,5 +125,6 @@ class TrainingApp : Application() {
         const val CHANNEL_SLEEP_ALARM = "sleep_alarm"
         const val CHANNEL_SLEEP_BACKUP = "sleep_alarm_backup"
         const val CHANNEL_SUPPS = "supplement_reminders"
+        const val CHANNEL_FUEL = "fuel_prompt"
     }
 }

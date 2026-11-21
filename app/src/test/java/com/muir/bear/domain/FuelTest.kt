@@ -119,3 +119,31 @@ class FuelTest {
         assertNull(SnackPicker.next(listOf(SnackPicker.Item(1, archived = true)), emptySet(), 7))
     }
 }
+
+class SnackPromptTest {
+    private val fri = java.time.LocalDateTime.of(2026, 11, 20, 10, 0) // a Friday
+
+    @Test
+    fun laterTodayOnAWeekday() {
+        assertEquals(fri.withHour(15).withMinute(30), SnackPrompt.next(fri, 930, 600, doneToday = false))
+    }
+
+    @Test
+    fun doneTodayMovesToTomorrowsWeekendTime() {
+        assertEquals(java.time.LocalDateTime.of(2026, 11, 21, 10, 0), SnackPrompt.next(fri, 930, 600, doneToday = true))
+    }
+
+    @Test
+    fun afterTodaysTimeGoesToTheNextDay() {
+        val sun = java.time.LocalDateTime.of(2026, 11, 22, 16, 0)
+        assertEquals(java.time.LocalDateTime.of(2026, 11, 23, 15, 30), SnackPrompt.next(sun, 930, 600, doneToday = false))
+    }
+
+    @Test
+    fun copy() {
+        assertEquals("Afternoon snack: Biltong, 50 g. Log it?", SnackPrompt.text("Biltong", "50 g"))
+        assertEquals(930, SnackPrompt.parse(null))
+        assertEquals(600, SnackPrompt.parse("600"))
+        assertEquals("15:30", SnackPrompt.fmt(930))
+    }
+}

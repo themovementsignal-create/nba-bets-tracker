@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.muir.bear.ui
 
 import androidx.compose.foundation.background
@@ -13,7 +15,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -26,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -35,6 +44,10 @@ import com.muir.bear.data.FuelRule
 import com.muir.bear.data.RuleKind
 import com.muir.bear.domain.Calc
 import com.muir.bear.domain.FuelScore
+import com.muir.bear.data.Setting
+import com.muir.bear.data.Settings
+import com.muir.bear.domain.SnackPrompt
+import com.muir.bear.fuel.FuelPrompt
 import com.muir.bear.fuel.FuelStore
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -68,6 +81,8 @@ fun FuelCard(nav: Nav) {
             HGap(10)
             Muted("Goal: ${(day.applicable - 1).coerceAtLeast(0)} of ${day.applicable} most days", Modifier.padding(bottom = 4.dp))
         }
+        val phase = rememberPhase()
+        if (phase.cut) Muted(phase.line())
         Gap(8)
         live.forEach { r ->
             val check = byRule[r.id]
@@ -83,8 +98,8 @@ fun FuelCard(nav: Nav) {
         }
         Gap(6)
         val snacks = logs.filter { it.slot == com.muir.bear.data.MealSlot.SNACK }
-        if (snacks.isEmpty()) Muted("No snack logged yet.")
-        else snacks.forEach { Muted("Snack: ${it.nameSnapshot} · ${fmtTime(it.loggedAt)}") }
+        snacks.forEach { Muted("Snack: ${it.nameSnapshot} · ${fmtTime(it.loggedAt)}") }
+        TextButton(onClick = { nav.go(Screen.Snacks) }) { Text(if (snacks.isEmpty()) "Log a snack ›" else "Snack list ›") }
     }
 }
 
@@ -214,6 +229,8 @@ fun FuelWeekScreen(nav: Nav) {
                 Muted("On rest days the shake rule drops out, so 4 of 5 counts.")
             }
         }
+        item { BigButton("Snack list", onClick = { nav.go(Screen.Snacks) }, secondary = true) }
+        item { BigButton("Fuel settings", onClick = { nav.go(Screen.FuelSettings) }, secondary = true) }
         val snacks = logs.filter { it.slot == com.muir.bear.data.MealSlot.SNACK }
         if (snacks.isNotEmpty()) item {
             SectionCard("Snacks") {
@@ -225,5 +242,152 @@ fun FuelWeekScreen(nav: Nav) {
 
 private val CellW = 26.dp
 
-private fun fmtDay(d: LocalDate): String =
-    "${d.dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.uppercase() }} ${d.dayOfMonth} ${d.month.name.take(3).lowercase().replaceFirstChar { it.uppercase() }}"
+private fun fmtDay(d: LocalDate): String = fmtDay(d.toEpochDay())
+
+// ---------- Phase ----------
+
+/** Maintenance or Cut. In v1 it only changes the words on the card. */
+data class FuelPhase(val cut: Boolean, val start: LocalDate?, val end: LocalDate?) {
+    /** "Cut · week 2 of 8", "Cut ended Sat 16 Jan", or "Maintenance". */
+    fun line(today: LocalDate = LocalDate.now()): String = when {
+        !cut -> "Maintenance"
+        start != null && today.isBefore(start) -> "Cut starts ${fmtDay(start)}"
+        end != null && today.isAfter(end) -> "Cut ended ${fmtDay(end)}"
+        start != null && end != null -> {
+            val week = java.time.temporal.ChronoUnit.WEEKS.between(start, today) + 1
+            val total = (java.time.temporal.ChronoUnit.DAYS.between(start, end) + 6) / 7
+            "Cut · week $week of $total"
+        }
+        else -> "Cut"
+    }
+
+    companion object {
+        fun from(phase: String?, start: String?, end: String?) = FuelPhase(
+            phase == "CUT",
+            start?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+            end?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+        )
+    }
+}
+
+@Composable
+private fun rememberPhase(): FuelPhase {
+    val dao = Graph.dao
+    val p = dao.settingFlow(Settings.FUEL_PHASE).collectAsState(initial = null).value
+    val s = dao.settingFlow(Settings.FUEL_PHASE_START).collectAsState(initial = null).value
+    val e = dao.settingFlow(Settings.FUEL_PHASE_END).collectAsState(initial = null).value
+    return FuelPhase.from(p, s, e)
+}
+
+// ---------- Settings → Fuel ----------
+
+@Composable
+fun FuelSettingsScreen(nav: Nav) {
+    val dao = Graph.dao
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val rules by dao.fuelRules().collectAsState(initial = emptyList())
+    val promptOn = dao.settingFlow(Settings.FUEL_PROMPT_ON).collectAsState(initial = null).value != "0"
+    val weekday = SnackPrompt.parse(dao.settingFlow(Settings.FUEL_PROMPT_WEEKDAY).collectAsState(initial = null).value)
+    val weekend = SnackPrompt.parse(dao.settingFlow(Settings.FUEL_PROMPT_WEEKEND).collectAsState(initial = null).value)
+    val phase = rememberPhase()
+    var editRule by remember { mutableStateOf<FuelRule?>(null) }
+    var pickTime by remember { mutableStateOf<String?>(null) }
+
+    fun put(key: String, value: String, reschedule: Boolean = false) {
+        Graph.scope.launch {
+            dao.putSetting(Setting(key, value))
+            if (reschedule) FuelPrompt.reschedule(context)
+        }
+    }
+
+    LogScaffold("Fuel settings", nav) {
+        item {
+            SectionCard("Rules") {
+                rules.forEach { r ->
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(r.label, Modifier.weight(1f).clickable { editRule = r }, style = MaterialTheme.typography.bodyLarge)
+                        Switch(checked = r.enabled, onCheckedChange = { on -> scope.launch { dao.updateFuelRule(r.copy(enabled = on)) } })
+                    }
+                }
+                Muted("Tap a rule to change its wording. Rules that are off don't count.")
+            }
+        }
+        item {
+            SectionCard("Afternoon snack prompt") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Prompt me", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                    Switch(checked = promptOn, onCheckedChange = { put(Settings.FUEL_PROMPT_ON, if (it) "1" else "0", reschedule = true) })
+                }
+                if (promptOn) {
+                    TextButton(onClick = { pickTime = Settings.FUEL_PROMPT_WEEKDAY }) { Text("Weekdays at ${SnackPrompt.fmt(weekday)}") }
+                    TextButton(onClick = { pickTime = Settings.FUEL_PROMPT_WEEKEND }) { Text("Weekends at ${SnackPrompt.fmt(weekend)}") }
+                    Muted("One suggestion from your snack list, with Log it, Something else and Skip today. No prompt once a snack is logged.")
+                }
+            }
+        }
+        item {
+            SectionCard("Phase") {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = !phase.cut, onClick = { put(Settings.FUEL_PHASE, "MAINTENANCE") }, label = { Text("Maintenance") })
+                    FilterChip(selected = phase.cut, onClick = {
+                        if (!phase.cut) Graph.scope.launch {
+                            val start = LocalDate.now()
+                            dao.putSetting(Setting(Settings.FUEL_PHASE, "CUT"))
+                            dao.putSetting(Setting(Settings.FUEL_PHASE_START, start.toString()))
+                            dao.putSetting(Setting(Settings.FUEL_PHASE_END, start.plusWeeks(8).minusDays(1).toString()))
+                        }
+                    }, label = { Text("Cut") })
+                }
+                if (phase.cut) {
+                    Gap(6)
+                    Text(phase.line())
+                    phase.start?.let { st ->
+                        Muted("From ${fmtDay(st)}" + (phase.end?.let { " to ${fmtDay(it)}" } ?: ""))
+                        Gap(4)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(4, 8, 12, 16).forEach { w ->
+                                val end = st.plusWeeks(w.toLong()).minusDays(1)
+                                FilterChip(selected = phase.end == end, onClick = { put(Settings.FUEL_PHASE_END, end.toString()) }, label = { Text("$w wk") })
+                            }
+                        }
+                        TextButton(onClick = { put(Settings.FUEL_PHASE_START, LocalDate.now().toString()) }) { Text("Restart from today") }
+                    }
+                }
+                Muted("For now the phase only changes the words on the Fuel card.")
+            }
+        }
+    }
+
+    editRule?.let { r ->
+        var label by remember(r.id) { mutableStateOf(r.label) }
+        AlertDialog(
+            onDismissRequest = { editRule = null },
+            title = { Text("Rule wording") },
+            text = { TextInput(label, { label = it }, "Rule") },
+            confirmButton = {
+                TextButton(enabled = label.isNotBlank(), onClick = {
+                    scope.launch { dao.updateFuelRule(r.copy(label = label.trim())) }
+                    editRule = null
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { editRule = null }) { Text("Cancel") } },
+        )
+    }
+    pickTime?.let { key ->
+        val start = if (key == Settings.FUEL_PROMPT_WEEKEND) weekend else weekday
+        val state = rememberTimePickerState(initialHour = start / 60, initialMinute = start % 60, is24Hour = true)
+        AlertDialog(
+            onDismissRequest = { pickTime = null },
+            title = { Text(if (key == Settings.FUEL_PROMPT_WEEKEND) "Weekend prompt" else "Weekday prompt") },
+            text = { TimePicker(state = state) },
+            confirmButton = {
+                TextButton(onClick = {
+                    put(key, (state.hour * 60 + state.minute).toString(), reschedule = true)
+                    pickTime = null
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { pickTime = null }) { Text("Cancel") } },
+        )
+    }
+}
