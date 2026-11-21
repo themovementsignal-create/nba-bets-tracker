@@ -52,11 +52,24 @@ import com.muir.bear.fuel.FuelStore
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
-// ---------- Today card ----------
+// ---------- Today ----------
 
-/** "Fuel" on Today: the rules as tappable rows, fruit as a 0–2 stepper, today's snack. */
+/** Today's score for the Fuel chip on Today, or null if every rule is off. */
 @Composable
-fun FuelCard(nav: Nav) {
+fun rememberFuelToday(): FuelScore.Day? {
+    val dao = Graph.dao
+    val rules by dao.fuelRules().collectAsState(initial = emptyList())
+    val checks by dao.fuelChecksOn(FuelStore.todayIso()).collectAsState(initial = emptyList())
+    val workouts by dao.finishedWorkouts().collectAsState(initial = emptyList())
+    val activities by dao.activities().collectAsState(initial = emptyList())
+    val live = rules.filter { it.enabled }
+    if (live.isEmpty()) return null
+    return FuelStore.score(live, checks, LocalDate.now() in FuelStore.trainingDays(workouts, activities))
+}
+
+/** Top of the Fuel page: today's rules as tappable rows, fruit as a 0–2 stepper, today's snack. */
+@Composable
+private fun FuelTodayCard(nav: Nav) {
     val dao = Graph.dao
     val scope = rememberCoroutineScope()
     val date = FuelStore.todayIso()
@@ -71,7 +84,7 @@ fun FuelCard(nav: Nav) {
     val byRule = checks.associateBy { it.ruleId }
     val day = FuelStore.score(live, checks, trained)
 
-    SectionCard("Fuel", onClick = { nav.go(Screen.Fuel) }) {
+    SectionCard("Today") {
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 "${day.hit} of ${day.applicable}",
@@ -174,6 +187,7 @@ fun FuelWeekScreen(nav: Nav) {
     val scores = shown.associateWith { d -> FuelStore.score(live, checks.filter { it.date == FuelStore.iso(d) }, d in trained) }
 
     LogScaffold("Fuel", nav) {
+        if (days.last() >= today) item { FuelTodayCard(nav) }
         item {
             SectionCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {

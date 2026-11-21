@@ -334,14 +334,18 @@ class UiTourTest {
             waitFor("120 floors this week")
             shot("stairmaster-saved")
         }
-        // ---- Fuel: the card on Today (the shake rule ticked itself when the workouts finished) ----
+        // ---- Fuel: the chip on Today opens the Fuel page (the shake rule ticked itself after the workouts) ----
         tab("Today")
-        scrollTo("Protein at every meal")
+        waitFor("Fuel")
+        shot("home-fuel-chip")
+        tap("Fuel")
+        waitFor("Protein at every meal")
         tap("Protein at every meal")
-        scrollTo("Shake after training")
         waitFor("Ticked for you · tap to change")
-        shot("home-fuel")
+        shot("fuel-today")
+        back()
         openFromMore("Fuel", "fuel-week") {
+            scrollTo("Score")
             waitFor("Score", timeout = 5_000)
             scrollTo("Snack list")
             tap("Snack list")

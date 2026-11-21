@@ -178,6 +178,7 @@ fun HomeScreen(nav: Nav) {
     // Your Today layout (order, on/off), chips and key lifts, from Edit Today.
     val layout = Dashboard.parse(dao.settingFlow(Settings.DASH_LAYOUT).collectAsState(initial = null).value)
     val ticks = Dashboard.parseTicks(dao.settingFlow(Settings.DASH_TICKS).collectAsState(initial = null).value)
+    val fuelToday = rememberFuelToday()
     val liftsSetting = dao.settingFlow(Settings.DASH_LIFTS).collectAsState(initial = null).value
     val templates by dao.templates().collectAsState(initial = emptyList())
 
@@ -347,11 +348,13 @@ fun HomeScreen(nav: Nav) {
                                 Dashboard.Tick.SUPPLEMENTS -> TickChip("Supplements", "${suppLog.size}/${supplements.size}", supplements.isNotEmpty() && suppLog.size >= supplements.size) { nav.go(Screen.Supplements) }
                                 Dashboard.Tick.SAUNA -> TickChip("Sauna", null, saunas.firstOrNull()?.at?.toLocalDate() == todayDate) { nav.go(Screen.Sauna) }
                                 Dashboard.Tick.PROTEIN -> TickChip("Protein", "$todayProtein/$proteinMin g", todayProtein >= proteinMin) { nav.go(Screen.Protein) }
+                                Dashboard.Tick.FUEL -> fuelToday?.let { d ->
+                                    TickChip("Fuel", "${d.hit}/${d.applicable}", d.goalMet) { nav.go(Screen.Fuel) }
+                                }
                             }
                         }
                     }
                 }
-                Dashboard.Item.FUEL -> item { FuelCard(nav) }
                 Dashboard.Item.LIFTS -> item { KeyLiftsCard(liftsSetting, workouts.size, nav) }
                 Dashboard.Item.MONTH -> item {
                     SectionCard("Sessions this month") {

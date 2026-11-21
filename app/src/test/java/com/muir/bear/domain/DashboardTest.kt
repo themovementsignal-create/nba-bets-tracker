@@ -31,7 +31,10 @@ class DashboardTest {
 
     @Test fun ticksDefaultWithoutProtein() {
         assertEquals(Tick.entries.toSet() - Tick.PROTEIN, Dashboard.parseTicks(null))
-        assertEquals(emptySet<Tick>(), Dashboard.parseTicks(""))
+        // A row saved before Fuel existed still gets the Fuel chip; switching it off sticks.
+        assertEquals(setOf(Tick.FUEL), Dashboard.parseTicks(""))
+        assertEquals(setOf(Tick.SAUNA, Tick.FUEL), Dashboard.parseTicks("sauna"))
+        assertEquals(setOf(Tick.SAUNA), Dashboard.parseTicks(Dashboard.serializeTicks(setOf(Tick.SAUNA))))
         assertEquals(setOf(Tick.SAUNA, Tick.PROTEIN), Dashboard.parseTicks(Dashboard.serializeTicks(setOf(Tick.PROTEIN, Tick.SAUNA))))
     }
 

@@ -10,7 +10,6 @@ object Dashboard {
         READINESS("readiness", "Readiness"),
         NEXT("next", "Next session"),
         TICKS("ticks", "Daily ticks"),
-        FUEL("fuel", "Fuel"),
         SLEEP("sleep", "Sleep"),
         STEPS("steps", "Steps & NEAT"),
         HRV("hrv", "HRV"),
@@ -32,7 +31,11 @@ object Dashboard {
         SUPPLEMENTS("supplements", "Supplements"),
         SAUNA("sauna", "Sauna"),
         PROTEIN("protein", "Protein"),
+        FUEL("fuel", "Fuel"),
     }
+
+    /** Chips added after people could customise the row: shown unless switched off ("-fuel"). */
+    private val addedLater = setOf(Tick.FUEL)
 
     data class Entry(val item: Item, val shown: Boolean)
 
@@ -68,10 +71,14 @@ object Dashboard {
     fun parseTicks(saved: String?): Set<Tick> {
         if (saved == null) return defaultTicks
         val byId = Tick.entries.associateBy { it.id }
-        return saved.split(',').mapNotNull { byId[it.trim()] }.toSet()
+        val tokens = saved.split(',').map { it.trim() }
+        val shown = tokens.mapNotNull { byId[it] }.toSet()
+        val mentioned = tokens.mapNotNull { byId[it.removePrefix("-")] }.toSet()
+        return shown + addedLater.filter { it !in mentioned }
     }
 
-    fun serializeTicks(ticks: Set<Tick>): String = Tick.entries.filter { it in ticks }.joinToString(",") { it.id }
+    fun serializeTicks(ticks: Set<Tick>): String =
+        (Tick.entries.filter { it in ticks }.map { it.id } + addedLater.filter { it !in ticks }.map { "-" + it.id }).joinToString(",")
 
     /**
      * Which template is next in your rotation: the one after the most recently finished, in the
