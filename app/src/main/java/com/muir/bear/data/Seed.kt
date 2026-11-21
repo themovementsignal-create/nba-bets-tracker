@@ -294,7 +294,6 @@ suspend fun seedFuel(db: AppDatabase) {
         if (dao.allFoodItems().isEmpty()) {
             val S = FoodCategory.SAVOURY; val W = FoodCategory.SWEET; val T = FoodCategory.TRAINING
             listOf(
-                FoodItem(name = "Biltong", portion = "50 g", category = S),
                 FoodItem(name = "Prosciutto + Babybel", portion = "×2", category = S),
                 FoodItem(name = "Tuna + crackers", portion = "1 tin + 4 crackers", category = S),
                 FoodItem(name = "Vintage cheddar + crackers", portion = "30 g + 4 crackers", category = S),

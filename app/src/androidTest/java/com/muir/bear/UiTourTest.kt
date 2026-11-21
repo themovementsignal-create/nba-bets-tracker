@@ -345,7 +345,7 @@ class UiTourTest {
             waitFor("Score", timeout = 5_000)
             scrollTo("Snack list")
             tap("Snack list")
-            waitFor("Biltong")
+            waitFor("Barebells bar")
             shot("snack-list")
             compose.onAllNodesWithText("Log")[0].performClick()
             waitFor("Logged ✓")
