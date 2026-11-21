@@ -19,7 +19,7 @@ import androidx.room.RoomDatabase
         SupplementLog::class, Bar::class, Venue::class, JumpTest::class, Setting::class,
         SleepSample::class, DailySteps::class, HrvReading::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
     autoMigrations = [
         // v2: conditioning kind, tracked-sleep summary columns, sleep samples, daily steps (additions only).
@@ -32,6 +32,8 @@ import androidx.room.RoomDatabase
         AutoMigration(from = 4, to = 5),
         // v6: estimated steps credited for a NEAT walk (one column, default 0).
         AutoMigration(from = 5, to = 6),
+        // v7: floors climbed for a Stairmaster session (one column, default 0).
+        AutoMigration(from = 6, to = 7),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {

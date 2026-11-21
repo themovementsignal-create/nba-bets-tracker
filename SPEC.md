@@ -39,6 +39,7 @@ Kotlin, Jetpack Compose, Material 3, Room (SQLite), Health Connect (Phase 3). Mi
 - [x] Sauna log: rounds, minutes, °C, cold contrast; prefilled with 3 rounds × 12–15 min at 80–100°C
 - [x] NEAT: treadmill timer plus manual entry; weekly target of 3–4 sessions × 60 min
 - [x] Conditioning: what you did (Rower, Bike, Sled, Circuit, Run, Other) + duration + session RPE (1–10)
+- [ ] Stairmaster in conditioning: floors climbed from the console, shown with about-steps, metres up and floors/min; weekly floors and best session on the Conditioning screen (database v7)
 - [x] Gear tracker: shoes, shirts, shorts and so on; default gear per session type; wear counted by sessions and age; replacement nudges at a set lifespan
 - [x] Sleep: tap at bed and wake, rate quality 1–5
 - [ ] Sleep tracking like Sleep Cycle: phone on the mattress, movement-based sleep stages, on-device YAMNet snore detection, smart alarm in a wake window, nightly score

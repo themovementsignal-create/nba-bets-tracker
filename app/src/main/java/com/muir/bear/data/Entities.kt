@@ -163,11 +163,13 @@ data class Activity(
     @ColumnInfo(defaultValue = "") val kind: String = "",
     /** NEAT walks: estimated steps the phone didn't count, added to that day's steps. (v6) */
     @ColumnInfo(defaultValue = "0") val steps: Int = 0,
+    /** Stairmaster: floors climbed, read off the console; 0 = not logged. (v7) */
+    @ColumnInfo(defaultValue = "0") val floors: Int = 0,
 )
 
 /** Conditioning options shown in the dropdown. */
 object ConditioningKind {
-    val all = listOf("Rower", "Bike", "Sled", "Circuit", "Run", "Other")
+    val all = listOf("Rower", "Bike", "Stairmaster", "Sled", "Circuit", "Run", "Other")
 }
 
 @Entity(tableName = "sauna", indices = [Index("at")])

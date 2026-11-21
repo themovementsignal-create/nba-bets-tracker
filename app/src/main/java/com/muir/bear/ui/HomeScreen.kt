@@ -233,7 +233,7 @@ fun HomeScreen(nav: Nav) {
             val week = sport.count { it.startedAt.toLocalDate().toEpochDay() >= weekStart }
             Tile(
                 "Conditioning", Screen.Activity, value = week.toDouble(), unit = if (week == 1) "session this week" else "sessions this week",
-                footLeft = sport.firstOrNull()?.let { "${activityTitle(it).removePrefix("Conditioning · ")} · ${fmtDate(it.startedAt)}" } ?: "None yet",
+                footLeft = sport.firstOrNull()?.let { "${activityTitle(it).removePrefix("Conditioning · ")}${if (it.floors > 0) " · ${it.floors} floors" else ""} · ${fmtDate(it.startedAt)}" } ?: "None yet",
                 done = sport.firstOrNull()?.startedAt?.toLocalDate() == todayDate,
             )
         }

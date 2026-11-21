@@ -76,6 +76,7 @@ import com.muir.bear.data.Supplement
 import com.muir.bear.data.SupplementLog
 import com.muir.bear.domain.Calc
 import com.muir.bear.domain.NeatSteps
+import com.muir.bear.domain.Stairs
 import com.muir.bear.domain.SuppReminders
 import com.muir.bear.reminders.SupplementReminders
 import androidx.core.app.NotificationManagerCompat
@@ -314,12 +315,30 @@ fun ActivityScreen(nav: Nav) {
     var kind by remember { mutableStateOf(ConditioningKind.all.first()) }
     var kindMenu by remember { mutableStateOf(false) }
     var duration by remember { mutableStateOf("30") }
+    var floors by remember { mutableStateOf("") }
     var rpe by remember { mutableStateOf<Int?>(null) }
     var notes by remember { mutableStateOf("") }
     var saved by remember { mutableStateOf(false) }
     val list = activities.filter { it.type == SessionType.BASKETBALL || it.type == SessionType.CONDITIONING }
+    val stairs = list.filter { it.kind == Stairs.KIND }
+    val isStairs = kind == Stairs.KIND
 
     LogScaffold("Conditioning", nav) {
+        if (stairs.any { it.floors > 0 }) item {
+            val weekStart = Calc.mondayOf(LocalDate.now()).toEpochDay()
+            val sum = Stairs.summary(stairs.map { Stairs.Session(it.startedAt.toLocalDate().toEpochDay(), it.floors, it.durationMin) }, weekStart)
+            SectionCard("Stairmaster") {
+                Text(
+                    "%,d floors this week".format(sum.weekFloors),
+                    style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold,
+                )
+                Muted(
+                    "About %,d m climbed in %d %s.".format(Stairs.metres(sum.weekFloors), sum.weekSessions, if (sum.weekSessions == 1) "session" else "sessions"),
+                )
+                Gap(4)
+                Muted("Best session: ${Stairs.label(sum.bestFloors)}" + (sum.bestPerMin?.let { " · best pace $it floors/min" } ?: ""))
+            }
+        }
         item {
             SectionCard("New session") {
                 Text("What did you do?")
@@ -338,7 +357,17 @@ fun ActivityScreen(nav: Nav) {
                 Gap(8)
                 NumberField(duration, { duration = it }, "Duration (minutes)", Modifier.fillMaxWidth(), decimal = false)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(30, 45, 60, 90, 120).forEach { m -> AssistChip(onClick = { duration = "$m" }, label = { Text("$m") }) }
+                    (if (isStairs) listOf(10, 15, 20, 30, 45) else listOf(30, 45, 60, 90, 120))
+                        .forEach { m -> AssistChip(onClick = { duration = "$m" }, label = { Text("$m") }) }
+                }
+                if (isStairs) {
+                    Gap(8)
+                    NumberField(floors, { floors = it; saved = false }, "Floors climbed (from the console)", Modifier.fillMaxWidth(), decimal = false)
+                    val f = floors.toIntOrNull() ?: 0
+                    if (f > 0) {
+                        val pace = Stairs.perMin(f, duration.toIntOrNull() ?: 0)
+                        Muted("About %,d steps · %,d m up".format(Stairs.steps(f), Stairs.metres(f)) + (pace?.let { " · $it floors/min" } ?: ""))
+                    } else Muted("Optional. One floor is 16 steps, about 3 m.")
                 }
                 Gap(8)
                 Text("Session RPE (1 = very easy, 10 = maximal)")
@@ -355,9 +384,10 @@ fun ActivityScreen(nav: Nav) {
                     scope.launch {
                         val m = min ?: return@launch
                         val at = System.currentTimeMillis() - m * 60_000L
-                        val id = dao.insertActivity(Activity(type = SessionType.CONDITIONING, startedAt = at, durationMin = m, rpe = rpe, notes = notes, kind = kind))
+                        val fl = if (isStairs) (floors.toIntOrNull() ?: 0).coerceAtLeast(0) else 0
+                        val id = dao.insertActivity(Activity(type = SessionType.CONDITIONING, startedAt = at, durationMin = m, rpe = rpe, notes = notes, kind = kind, floors = fl))
                         Actions.recordGearUsage(SessionType.CONDITIONING, id, at)
-                        notes = ""; rpe = null; saved = true
+                        notes = ""; rpe = null; floors = ""; saved = true
                     }
                 })
                 if (rpe != null && min != null) Muted("Load: ${rpe!! * min} (RPE × minutes)")
@@ -365,7 +395,7 @@ fun ActivityScreen(nav: Nav) {
         }
         items(list, key = { it.id }) { a ->
             DeletableRow(
-                activityTitle(a) + " · ${a.durationMin} min" + (a.rpe?.let { " · RPE $it · load ${it * a.durationMin}" } ?: ""),
+                activityTitle(a) + " · ${a.durationMin} min" + (if (a.floors > 0) " · ${Stairs.label(a.floors)}" else "") + (a.rpe?.let { " · RPE $it · load ${it * a.durationMin}" } ?: ""),
                 fmtDateTime(a.startedAt) + if (a.notes.isNotBlank()) " · ${a.notes}" else "",
             ) { scope.launch { dao.deleteActivity(a.id); dao.deleteGearUsageForSession(a.type, a.id) } }
         }

@@ -162,4 +162,22 @@ class MigrationTest {
             assertEquals(6500, dao.stepsOn(20000)?.steps)
         }
     }
+
+    @Test
+    fun upgradeFromV6KeepsData() {
+        val name = "migration-test-v6.db"
+        createOld(name, 6) { db ->
+            db.execSQL("INSERT INTO activity (id, type, startedAt, durationMin, rpe, notes, kind, steps) VALUES (1, 'CONDITIONING', 1000, 20, 7, '', 'Rower', 0)")
+            db.execSQL("INSERT INTO activity (id, type, startedAt, durationMin, rpe, notes, kind, steps) VALUES (2, 'NEAT', 2000, 45, NULL, '', '', 3200)")
+        }
+        openCurrent(name) { db ->
+            val all = db.dao().allActivities().sortedBy { it.id }
+            assertEquals(2, all.size)
+            assertEquals("Rower", all[0].kind)
+            assertEquals(7, all[0].rpe)
+            assertEquals(0, all[0].floors)
+            assertEquals(3200, all[1].steps)
+            assertEquals(0, all[1].floors)
+        }
+    }
 }

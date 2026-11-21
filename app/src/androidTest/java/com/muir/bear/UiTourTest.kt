@@ -313,6 +313,17 @@ class UiTourTest {
             tap("Save")
             waitFor("Saved ✓")
             shot("activity-saved")
+            // Stairmaster: floors from the console, then the weekly summary card appears.
+            tap("Bike")
+            tap("Stairmaster")
+            compose.onAllNodes(hasSetTextAction())[1].performTextInput("120")
+            hideKeyboard()
+            waitFor("Floors climbed (from the console)")
+            shot("stairmaster-entry")
+            compose.onAllNodesWithText("7")[0].performClick()
+            tap("Save")
+            waitFor("120 floors this week")
+            shot("stairmaster-saved")
         }
         openFromMore("Insights", "insights") {
             waitFor("Hard sets per muscle")
