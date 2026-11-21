@@ -17,14 +17,17 @@ object ExerciseType {
     const val TIMED = "TIMED"
     /** Load × distance (sled push, carries). */
     const val LOAD_DISTANCE = "LOAD_DISTANCE"
+    /** Stairmaster in a workout: minutes (kept in `seconds`) × floors (kept in `reps`). */
+    const val FLOORS = "FLOORS"
 
-    val all = listOf(WEIGHT_REPS, BODYWEIGHT, TIMED, LOAD_DISTANCE)
+    val all = listOf(WEIGHT_REPS, BODYWEIGHT, TIMED, LOAD_DISTANCE, FLOORS)
 
     fun label(type: String) = when (type) {
         WEIGHT_REPS -> "Weight × reps"
         BODYWEIGHT -> "Bodyweight ± load"
         TIMED -> "Timed hold"
         LOAD_DISTANCE -> "Load × distance"
+        FLOORS -> "Minutes × floors"
         else -> type
     }
 }

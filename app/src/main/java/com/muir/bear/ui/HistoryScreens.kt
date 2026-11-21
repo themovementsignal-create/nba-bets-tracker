@@ -48,6 +48,7 @@ import com.muir.bear.data.WorkoutSet
 import com.muir.bear.domain.Calc
 import com.muir.bear.domain.Muscles
 import com.muir.bear.domain.Rpe
+import com.muir.bear.domain.Stairs
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -60,6 +61,7 @@ import kotlinx.coroutines.withContext
 fun setScore(type: String, s: WorkoutSet): Double = when (type) {
     ExerciseType.TIMED -> (s.seconds ?: 0).toDouble()
     ExerciseType.LOAD_DISTANCE -> (s.weightKg ?: 0.0) * (s.distanceM ?: 0.0)
+    ExerciseType.FLOORS -> (s.reps ?: 0).toDouble()
     ExerciseType.BODYWEIGHT -> {
         val w = s.weightKg ?: 0.0
         if (w > 0) Calc.epley(w, s.reps ?: 0) else (s.reps ?: 0).toDouble()
@@ -70,6 +72,7 @@ fun setScore(type: String, s: WorkoutSet): Double = when (type) {
 fun scoreLabel(type: String) = when (type) {
     ExerciseType.TIMED -> "Longest hold (s)"
     ExerciseType.LOAD_DISTANCE -> "Best load × distance (kg·m)"
+    ExerciseType.FLOORS -> "Most floors"
     ExerciseType.BODYWEIGHT -> "Best e1RM of added load (or reps)"
     else -> "Estimated 1RM (Epley, kg)"
 }
@@ -93,6 +96,12 @@ fun personalRecords(type: String, history: List<SetWithTime>): List<PrLine> {
             best("Heaviest load", { it.weightKg }) { describeSet(type, it.set) }
             best("Longest distance", { it.distanceM }) { describeSet(type, it.set) }
             best("Best load × distance", { (it.weightKg ?: 0.0) * (it.distanceM ?: 0.0) }) { describeSet(type, it.set) }
+        }
+        ExerciseType.FLOORS -> {
+            best("Most floors", { it.reps?.toDouble() }) { describeSet(type, it.set) }
+            best("Best pace", { Stairs.perMin(it.reps ?: 0, ((it.seconds ?: 0) / 60.0).roundToInt()) }) {
+                "${Stairs.perMin(it.set.reps ?: 0, ((it.set.seconds ?: 0) / 60.0).roundToInt())} floors/min (${describeSet(type, it.set)})"
+            }
         }
         else -> {
             best("Estimated 1RM", { Calc.epley(it.weightKg ?: 0.0, it.reps ?: 0) }) {

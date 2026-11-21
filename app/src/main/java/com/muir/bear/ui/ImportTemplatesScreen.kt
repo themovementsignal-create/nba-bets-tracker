@@ -226,5 +226,6 @@ private fun typeLabel(type: String) = when (type) {
     ExerciseType.BODYWEIGHT -> "bodyweight"
     ExerciseType.TIMED -> "timed hold"
     ExerciseType.LOAD_DISTANCE -> "load × distance"
+    ExerciseType.FLOORS -> "minutes × floors"
     else -> "weight × reps"
 }

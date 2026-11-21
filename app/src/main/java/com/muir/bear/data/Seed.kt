@@ -2,6 +2,7 @@ package com.muir.bear.data
 
 import androidx.room.withTransaction
 import com.muir.bear.data.ExerciseType.BODYWEIGHT
+import com.muir.bear.data.ExerciseType.FLOORS
 import com.muir.bear.data.ExerciseType.LOAD_DISTANCE
 import com.muir.bear.data.ExerciseType.TIMED
 import com.muir.bear.data.ExerciseType.WEIGHT_REPS
@@ -91,6 +92,7 @@ private val seedExercises = listOf(
     SeedExercise("Sled Push", LOAD_DISTANCE, Equipment.SLED, rest = 120,
         alts = listOf("DB Walking Lunge", "Farmer Carry")),
     SeedExercise("Step-Down Isometric", TIMED, rest = 60),
+    SeedExercise("Stairmaster", FLOORS, rest = 60),
     SeedExercise("Seated Calf Raise", WEIGHT_REPS, Equipment.MACHINE, rest = 60,
         alts = listOf("Single-Leg Calf Raise")),
     // Session 2: Push/Pull Upper
@@ -260,4 +262,14 @@ suspend fun migrateDataV2(db: AppDatabase) {
         .filter { it.kind == TemplateKind.ACTIVITY && it.name == "Wednesday · Basketball or conditioning" }
         .forEach { dao.updateTemplate(it.copy(name = "Wednesday · Conditioning")) }
     dao.putSetting(Setting("data_v2", "1"))
+}
+
+/** Adds exercises shipped after the first install (never touches existing ones). Safe every launch. */
+suspend fun addNewExercises(db: AppDatabase) {
+    val dao = db.dao()
+    if (dao.setting("data_stairmaster") != null) return
+    if (dao.exerciseByName("Stairmaster") == null) {
+        dao.insertExercise(Exercise(name = "Stairmaster", type = FLOORS, restSeconds = 60))
+    }
+    dao.putSetting(Setting("data_stairmaster", "1"))
 }

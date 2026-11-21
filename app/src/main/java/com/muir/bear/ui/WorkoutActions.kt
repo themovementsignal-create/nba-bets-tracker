@@ -160,6 +160,7 @@ fun describeSet(type: String, s: WorkoutSet): String {
             if (w != null && w != 0.0) append(" @ ${Calc.fmt(w)} kg")
         }
         ExerciseType.LOAD_DISTANCE -> "${Calc.fmt(w ?: 0.0)} kg × ${Calc.fmt(s.distanceM ?: 0.0)} m"
+        ExerciseType.FLOORS -> "${Calc.fmt((s.seconds ?: 0) / 60.0)} min · ${s.reps ?: 0} floors"
         ExerciseType.BODYWEIGHT -> {
             val load = when {
                 w == null || w == 0.0 -> "BW"

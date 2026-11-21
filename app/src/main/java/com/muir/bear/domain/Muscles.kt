@@ -36,6 +36,7 @@ object Muscles {
         "Goblet Squat" to Worked(listOf("quadriceps", "glutes"), listOf("adductors", "abdominals")),
         "Sled Push" to Worked(listOf("quadriceps", "glutes"), listOf("calves", "hamstrings")),
         "Step-Down Isometric" to Worked(listOf("quadriceps"), listOf("glutes")),
+        "Stairmaster" to Worked(listOf("quadriceps", "glutes"), listOf("calves", "hamstrings")),
         "Seated Calf Raise" to Worked(listOf("calves")),
         "Dead Hang" to Worked(listOf("forearms"), listOf("lats")),
         "Chin-Up" to Worked(listOf("lats", "biceps"), listOf("middle back", "forearms")),

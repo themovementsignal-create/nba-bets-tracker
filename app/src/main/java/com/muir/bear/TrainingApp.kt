@@ -16,6 +16,7 @@ import com.muir.bear.data.TrainingDao
 import com.muir.bear.data.MuscleData
 import com.muir.bear.sleep.SleepTracker
 import com.muir.bear.sleep.WakeAlarm
+import com.muir.bear.data.addNewExercises
 import com.muir.bear.data.migrateDataV2
 import com.muir.bear.data.seedIfNeeded
 import com.muir.bear.steps.Steps
@@ -65,6 +66,7 @@ class TrainingApp : Application() {
         Graph.scope.launch {
             seedIfNeeded(Graph.db)
             migrateDataV2(Graph.db)
+            addNewExercises(Graph.db)
             MuscleData.fillMissing()
             // Give Android a moment to restart an interrupted tracker before tidying up old nights.
             kotlinx.coroutines.delay(5_000)

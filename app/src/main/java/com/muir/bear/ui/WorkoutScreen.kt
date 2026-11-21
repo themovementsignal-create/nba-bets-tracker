@@ -95,6 +95,7 @@ import com.muir.bear.data.ExerciseType
 import com.muir.bear.data.WorkoutSet
 import com.muir.bear.domain.Calc
 import com.muir.bear.domain.Rpe
+import kotlin.math.roundToInt
 import com.muir.bear.timer.RestTimer
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -613,6 +614,7 @@ private fun HeaderCell(text: String, width: Dp) {
 private fun fieldLabels(type: String) = when (type) {
     ExerciseType.TIMED -> "KG" to "SEC"
     ExerciseType.LOAD_DISTANCE -> "KG" to "M"
+    ExerciseType.FLOORS -> "MIN" to "FLOORS"
     ExerciseType.BODYWEIGHT -> "±KG" to "REPS"
     else -> "KG" to "REPS"
 }
@@ -643,13 +645,17 @@ private fun SetRow(
         else -> x?.reps?.toString()
     }
 
-    var weight by remember(set.id) { mutableStateOf(Calc.fmt(set.weightKg)) }
+    // Stairmaster: the first box is minutes (stored as seconds), not kg.
+    fun firstOf(x: WorkoutSet?): Double? =
+        if (type == ExerciseType.FLOORS) x?.seconds?.let { it / 60.0 } else x?.weightKg
+
+    var weight by remember(set.id) { mutableStateOf(Calc.fmt(firstOf(set))) }
     var second by remember(set.id) { mutableStateOf(secondOf(set).orEmpty()) }
 
     // Placeholders: last session's numbers, else the set above in this workout, else the template target.
     // …or the starting load written in the target ("5 · 100 kg").
     val targetLoad = Regex("(\\d+(?:\\.\\d+)?)\\s*kg").find(set.target)?.groupValues?.get(1)
-    val weightHint = (prev?.weightKg ?: above?.weightKg)?.let { Calc.fmt(it) } ?: targetLoad ?: if (type == ExerciseType.BODYWEIGHT) "0" else ""
+    val weightHint = (firstOf(prev) ?: firstOf(above))?.let { Calc.fmt(it) } ?: targetLoad ?: if (type == ExerciseType.BODYWEIGHT) "0" else ""
     val secondHint = secondOf(prev) ?: secondOf(above) ?: targetPlaceholder(set.target)
 
     fun build(completed: Boolean, w: String, s: String): WorkoutSet {
@@ -658,6 +664,7 @@ private fun SetRow(
         return when (type) {
             ExerciseType.TIMED -> set.copy(weightKg = wVal, seconds = sNum?.toInt(), completed = completed)
             ExerciseType.LOAD_DISTANCE -> set.copy(weightKg = wVal, distanceM = sNum, completed = completed)
+            ExerciseType.FLOORS -> set.copy(seconds = wVal?.let { (it * 60).roundToInt() }, reps = sNum?.toInt(), completed = completed)
             else -> set.copy(weightKg = wVal, reps = sNum?.toInt(), completed = completed)
         }
     }

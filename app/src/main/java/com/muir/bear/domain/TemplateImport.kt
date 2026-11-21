@@ -20,6 +20,7 @@ package com.muir.bear.domain
 object TemplateImport {
     /** Exercise types, same ids as the app's ExerciseType. */
     const val WEIGHT_REPS = "WEIGHT_REPS"
+    const val FLOORS = "FLOORS"
     const val BODYWEIGHT = "BODYWEIGHT"
     const val TIMED = "TIMED"
     const val LOAD_DISTANCE = "LOAD_DISTANCE"
@@ -232,6 +233,7 @@ object TemplateImport {
         "bodyweight", "body_weight", "bw" -> BODYWEIGHT
         "timed", "time", "hold", "isometric", "seconds" -> TIMED
         "distance", "load_distance", "carry", "sled" -> LOAD_DISTANCE
+        "floors", "stairs", "stairmaster", "stepmill" -> FLOORS
         else -> null
     }
 }
