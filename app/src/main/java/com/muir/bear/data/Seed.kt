@@ -264,6 +264,44 @@ suspend fun migrateDataV2(db: AppDatabase) {
     dao.putSetting(Setting("data_v2", "1"))
 }
 
+/** Fuel defaults: the six rules and the snack list. Added once; never changes what you've edited. */
+suspend fun seedFuel(db: AppDatabase) {
+    val dao = db.dao()
+    if (dao.setting("data_fuel") != null) return
+    db.withTransaction {
+        if (dao.setting("data_fuel") != null) return@withTransaction
+        dao.insertFuelRules(
+            listOf(
+                FuelRule("protein_each_meal", "Protein at every meal", RuleKind.MANUAL, position = 0),
+                FuelRule("fruit_two", "Two pieces of fruit", RuleKind.COUNTER, target = 2, position = 1),
+                FuelRule("veg_half_dinner", "Half of dinner is veg", RuleKind.MANUAL, position = 2),
+                FuelRule("chips_small_bag", "Chips: one small bag after dinner, or none", RuleKind.DEFAULT_ON, position = 3),
+                FuelRule("planned_snack", "One planned afternoon snack", RuleKind.AUTO_SNACK, position = 4),
+                FuelRule("shake_after_gym", "Shake after training", RuleKind.AUTO_WORKOUT, position = 5),
+            )
+        )
+        if (dao.allFoodItems().isEmpty()) {
+            val S = FoodCategory.SAVOURY; val W = FoodCategory.SWEET; val T = FoodCategory.TRAINING
+            listOf(
+                FoodItem(name = "Biltong", portion = "50 g", category = S),
+                FoodItem(name = "Prosciutto + Babybel", portion = "×2", category = S),
+                FoodItem(name = "Tuna + crackers", portion = "1 tin + 4 crackers", category = S),
+                FoodItem(name = "Vintage cheddar + crackers", portion = "30 g + 4 crackers", category = S),
+                FoodItem(name = "Boiled eggs", portion = "2", category = S),
+                FoodItem(name = "Edamame", portion = "1 cup", category = S),
+                FoodItem(name = "Leftovers", portion = "small bowl", category = S),
+                FoodItem(name = "Barebells bar", portion = "1 bar", category = W),
+                FoodItem(name = "YoPro", portion = "1 tub", category = W),
+                FoodItem(name = "Greek yoghurt + berries + honey", portion = "200 g", category = W),
+                FoodItem(name = "Protein shake + dark chocolate", portion = "1 shake + 2 squares", category = W),
+                FoodItem(name = "Date balls + shake", portion = "2 balls + 1 shake", category = W),
+                FoodItem(name = "Paul's protein smoothie", portion = "1 smoothie", category = T, kcal = 272, proteinG = 30.0),
+            ).forEachIndexed { i, f -> dao.insertFoodItem(f.copy(position = i)) }
+        }
+        dao.putSetting(Setting("data_fuel", "1"))
+    }
+}
+
 /** Adds exercises shipped after the first install (never touches existing ones). Safe every launch. */
 suspend fun addNewExercises(db: AppDatabase) {
     val dao = db.dao()

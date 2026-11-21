@@ -494,4 +494,73 @@ interface TrainingDao {
 
     @Query("DELETE FROM hrv_reading WHERE id = :id")
     suspend fun deleteHrv(id: Long)
+
+    // ---------- Fuel (v8) ----------
+
+    @Query("SELECT * FROM fuel_rule ORDER BY position")
+    fun fuelRules(): Flow<List<FuelRule>>
+
+    @Query("SELECT * FROM fuel_rule ORDER BY position")
+    suspend fun allFuelRules(): List<FuelRule>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertFuelRules(rules: List<FuelRule>)
+
+    @Update
+    suspend fun updateFuelRule(rule: FuelRule)
+
+    @Query("SELECT * FROM fuel_check WHERE date = :date")
+    fun fuelChecksOn(date: String): Flow<List<FuelCheck>>
+
+    /** ISO dates sort as text, so a range works directly. */
+    @Query("SELECT * FROM fuel_check WHERE date BETWEEN :from AND :to")
+    fun fuelChecksBetween(from: String, to: String): Flow<List<FuelCheck>>
+
+    @Query("SELECT * FROM fuel_check WHERE date = :date AND ruleId = :ruleId")
+    suspend fun fuelCheck(date: String, ruleId: String): FuelCheck?
+
+    @Upsert
+    suspend fun putFuelCheck(c: FuelCheck)
+
+    @Query("DELETE FROM fuel_check WHERE date = :date AND ruleId = :ruleId")
+    suspend fun deleteFuelCheck(date: String, ruleId: String)
+
+    @Query("SELECT * FROM food_item WHERE archived = 0 ORDER BY position, id")
+    fun foodItems(): Flow<List<FoodItem>>
+
+    @Query("SELECT * FROM food_item ORDER BY archived, position, id")
+    fun allFoodItemsFlow(): Flow<List<FoodItem>>
+
+    @Query("SELECT * FROM food_item ORDER BY position, id")
+    suspend fun allFoodItems(): List<FoodItem>
+
+    @Query("SELECT * FROM food_item WHERE id = :id")
+    suspend fun foodItem(id: Long): FoodItem?
+
+    @Insert
+    suspend fun insertFoodItem(f: FoodItem): Long
+
+    @Update
+    suspend fun updateFoodItem(f: FoodItem)
+
+    @Update
+    suspend fun updateFoodItems(f: List<FoodItem>)
+
+    @Query("SELECT * FROM food_log WHERE date = :date ORDER BY loggedAt")
+    fun foodLogsOn(date: String): Flow<List<FoodLog>>
+
+    @Query("SELECT * FROM food_log WHERE date = :date ORDER BY loggedAt")
+    suspend fun foodLogsOnce(date: String): List<FoodLog>
+
+    @Query("SELECT * FROM food_log WHERE date BETWEEN :from AND :to ORDER BY loggedAt")
+    fun foodLogsBetween(from: String, to: String): Flow<List<FoodLog>>
+
+    @Query("SELECT * FROM food_log WHERE date >= :from ORDER BY loggedAt DESC")
+    suspend fun foodLogsSince(from: String): List<FoodLog>
+
+    @Insert
+    suspend fun insertFoodLog(l: FoodLog): Long
+
+    @Query("DELETE FROM food_log WHERE id = :id")
+    suspend fun deleteFoodLog(id: Long)
 }

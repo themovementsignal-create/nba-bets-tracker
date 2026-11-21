@@ -180,4 +180,23 @@ class MigrationTest {
             assertEquals(0, all[1].floors)
         }
     }
+
+    @Test
+    fun upgradeFromV7KeepsDataAndAddsFuel() {
+        val name = "migration-test-v7.db"
+        createOld(name, 7) { db ->
+            db.execSQL("INSERT INTO activity (id, type, startedAt, durationMin, rpe, notes, kind, steps, floors) VALUES (1, 'CONDITIONING', 1000, 20, 7, '', 'Stairmaster', 0, 120)")
+        }
+        openCurrent(name) { db ->
+            val dao = db.dao()
+            assertEquals(120, dao.allActivities().single().floors)
+            // The new Fuel tables exist and start empty (defaults are seeded by the app, not the migration).
+            assertEquals(0, dao.allFuelRules().size)
+            assertEquals(0, dao.allFoodItems().size)
+            dao.insertFoodItem(com.muir.bear.data.FoodItem(name = "Biltong", portion = "50 g", category = "SAVOURY"))
+            dao.putFuelCheck(com.muir.bear.data.FuelCheck("2026-11-21", "fruit_two", 2, "MANUAL"))
+            assertEquals(2, dao.fuelCheck("2026-11-21", "fruit_two")?.value)
+            assertEquals("Biltong", dao.allFoodItems().single().name)
+        }
+    }
 }

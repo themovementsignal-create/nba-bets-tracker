@@ -18,8 +18,9 @@ import androidx.room.RoomDatabase
         BodyWeight::class, ProteinEntry::class, ProteinPreset::class, Supplement::class,
         SupplementLog::class, Bar::class, Venue::class, JumpTest::class, Setting::class,
         SleepSample::class, DailySteps::class, HrvReading::class,
+        FuelRule::class, FuelCheck::class, FoodItem::class, FoodLog::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
     autoMigrations = [
         // v2: conditioning kind, tracked-sleep summary columns, sleep samples, daily steps (additions only).
@@ -34,6 +35,8 @@ import androidx.room.RoomDatabase
         AutoMigration(from = 5, to = 6),
         // v7: floors climbed for a Stairmaster session (one column, default 0).
         AutoMigration(from = 6, to = 7),
+        // v8: Fuel (food rules, daily checks, snack list, food log). New tables only.
+        AutoMigration(from = 7, to = 8),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {

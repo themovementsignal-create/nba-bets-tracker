@@ -119,6 +119,8 @@ object DataIO {
         }
         // Backups from before v3 have no muscles; fill them in again.
         MuscleData.fillMissing()
+        // Backups from before v8 have no Fuel data; put the default rules and snacks back.
+        com.muir.bear.data.seedFuel(Graph.db)
         return RestoreResult(tableCount, rowCount)
     }
 
